@@ -1,0 +1,23 @@
+num, desc, pot setting
+0, multicolored, Changes hue
+1, Red, Changes saturation/brightness
+2, Geen, Changes saturation/brigthess
+3, Blue, Changes saturation/brightness
+4, Rainbow, Speed of rotation
+5, Fire, Intensity
+6, Inverted Rainbow, Speed of rotation
+7, null, null
+8, Hue = Amplitue, mic sensitivity
+9, saturation = amplitude, mic sensitivity 
+A, history of hue = amplitude at 1 led per stroke, mic sensitivity
+B, history of saturation = amplitude at 1 led per stroke, mic sensitivity
+C, null, null
+D, null, null
+E, null, null
+F, null, null
+
+# 16 slots divided into 4 groups of 4
+# 0-3 solid color
+# 4-7 multi color
+# 8-B mic
+# C-F ?
