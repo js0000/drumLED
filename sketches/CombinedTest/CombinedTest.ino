@@ -1,5 +1,5 @@
 /*
- * Combined.ino
+ * CombinedTest.ino
  */
 
 #include "FastLED.h"
