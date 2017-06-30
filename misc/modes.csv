@@ -1,23 +1,24 @@
-num, desc, pot setting
-0, multicolored, Changes hue
-1, Red, Changes saturation/brightness
-2, Geen, Changes saturation/brigthess
-3, Blue, Changes saturation/brightness
-4, Rainbow, Speed of rotation
-5, Fire, Intensity
-6, Inverted Rainbow, Speed of rotation
-7, null, null
-8, Hue = Amplitue, mic sensitivity
-9, saturation = amplitude, mic sensitivity 
-A, history of hue = amplitude at 1 led per stroke, mic sensitivity
-B, history of saturation = amplitude at 1 led per stroke, mic sensitivity
-C, null, null
-D, null, null
-E, null, null
-F, null, null
-
+# modes.csv
 # 16 slots divided into 4 groups of 4
-# 0-3 solid color
+# 0-3 single color
 # 4-7 multi color
 # 8-B mic
 # C-F use programming logic
+# header: first row
+number, description, potentiometer parameter
+0, changeable color, hue
+1, red, saturation/brightness
+2, green, saturation/brightness
+3, blue, saturation/brightness
+4, rainbow, rotation speed
+5, fire, intensity
+6, inverted rainbow, rotation speed
+7, null, null
+8, hue from amplitude, microphone sensitivity
+9, saturation = amplitude in indigo (or another psychedelic color), microphone sensitivity
+A, log of hue from amplitude (adding 1 LED each stroke), microphone sensitivity
+B, log of saturation from amplitude in indigo (or another psychedelic color and adding 1 LED each stroke), mic sensitivity
+C, change to random solid hue every N hits, change frequency
+D, change to random CSV values (within ranges) every N hits, change frequency
+E, null, null
+F, null, null
