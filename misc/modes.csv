@@ -5,6 +5,7 @@
 # 8-B mic
 # C-F use programming logic
 # header: first row
+
 number, description, potentiometer parameter
 0, changeable color, hue
 1, red, saturation/brightness
