@@ -5,7 +5,6 @@
 # 8-B mic
 # C-F use programming logic
 # header: first row
-
 number, description, potentiometer parameter
 0, changeable color, hue
 1, red, saturation/brightness
@@ -14,12 +13,12 @@ number, description, potentiometer parameter
 4, rainbow, rotation speed
 5, fire, intensity
 6, inverted rainbow, rotation speed
-7, null, null
+7
 8, hue from amplitude, microphone sensitivity
 9, saturation = amplitude in indigo (or another psychedelic color), microphone sensitivity
 A, log of hue from amplitude (adding 1 LED each stroke), microphone sensitivity
 B, log of saturation from amplitude in indigo (or another psychedelic color and adding 1 LED each stroke), mic sensitivity
 C, change to random solid hue every N hits, change frequency
 D, change to random CSV values (within ranges) every N hits, change frequency
-E, null, null
-F, null, null
+E
+F
