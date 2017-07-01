@@ -9,13 +9,15 @@
 #define MIC_PIN 0
 #define POT_PIN 2
 
+#define DEBUG_COUNTER 32
+
 
 // BEGIN CONFIG VARIABLES
 
 // Sample window width in mS (50 mS = 20Hz)
 const int sampleWindow = 50;
-const double maxVolts = 2.2;
-const double minVolts = 0.2;
+const double maxVolts = 2.1;
+const double minVolts = 0.1;
 const unsigned long maxMillisBeforeTurningOff = 4000;
 // yellow = 60
 // this is for the max volume hue
@@ -41,12 +43,28 @@ uint8_t previousValue = 0;
 unsigned long lastSampleAboveMinVolts = 0;
 
 
+// DEBUGGING
+
+double aVolts[DEBUG_COUNTER];
+double aNumerator[DEBUG_COUNTER];
+double aRatio[DEBUG_COUNTER];
+uint8_t aHue[DEBUG_COUNTER];
+int aInvertedHue[DEBUG_COUNTER];
+int aScaledHue[DEBUG_COUNTER];
+int aPreppedHue[DEBUG_COUNTER];
+uint8_t aCurrentHue[DEBUG_COUNTER];
+long aMillis[DEBUG_COUNTER];
+int counter = 0;
+boolean dumped = false;
+
+
 // STOCK ARDUINO CALLS
 
 void setup() {
   FastLED.addLeds<NEOPIXEL, LED_PIN>(leds, NUM_LEDS);
   pinMode(MIC_PIN, INPUT);
   pinMode(POT_PIN, INPUT);
+  Serial.begin( 9600 );
 }
 
 void loop() {
@@ -61,8 +79,9 @@ void combinedTest() {
   uint8_t hue = previousHue;
 
   double rawVolts = readPeakToPeak();
-  double cookedVolts = applyPotFilter(rawVolts);
-  int rawHue = voltsToHue(cookedVolts);
+  //double cookedVolts = applyPotFilter(rawVolts);
+  //int rawHue = voltsToHue(cookedVolts);
+  int rawHue = voltsToHue(rawVolts);
 
   if(rawHue != 0)
   {
@@ -77,7 +96,8 @@ void combinedTest() {
     // check timing
     unsigned long now = millis();
     unsigned long sinceLastSample = now - lastSampleAboveMinVolts;
-    if(sinceLastSample > maxMillisBeforeTurningOff) {
+    if(sinceLastSample > maxMillisBeforeTurningOff)
+    {
       hue = 0;
       saturation = 0;
       value = 0;
@@ -101,6 +121,7 @@ void combinedTest() {
 
 
 // pretty much stolen from adafruit
+// https://learn.adafruit.com/adafruit-microphone-amplifier-breakout/measuring-sound-levels
 double readPeakToPeak() {
    unsigned long startMillis = millis();  // Start of sample window
    unsigned int peakToPeak = 0;   // peak-to-peak level
@@ -148,13 +169,23 @@ double applyPotFilter(double v) {
 
 // returns zero if below minVolts
 int voltsToHue(double v) {
-    int h = 0;
-    if( v > minVolts) {
-        double numerator = v * 255.0;
-        double ratio = numerator / maxVolts;
-        h = round(ratio);
+  int h = 0;
+  if( v > minVolts)
+  {
+    double numerator = v * 255.0;
+    double ratio = numerator / maxVolts;
+    h = round(ratio);
+
+    // DEBUGGING
+    if(counter < DEBUG_COUNTER)
+    {
+      aVolts[counter] = v;
+      aNumerator[counter] = numerator;
+      aRatio[counter] = ratio;
+      aHue[counter] = h;
     }
-    return h;
+  }
+  return h;
 }
 
 // prepares raw hue to be put on HSV color scheme
@@ -172,7 +203,8 @@ uint8_t prepareHue(int rh) {
   // scale to 128
   int scaledHue = invertedHue / 2;
   // 0-127 louder, 128-255 quieter
-  if(!louder) {
+  if(!louder)
+  {
     // on a circle, not a line
     scaledHue = 256 - scaledHue;
   }
@@ -180,7 +212,54 @@ uint8_t prepareHue(int rh) {
   int preppedHue = scaledHue + hueOffset;
   // go around the circle, if needed
   uint8_t currentHue = preppedHue % 255;
+
+  // DEBUGGING
+  if(counter < DEBUG_COUNTER)
+  {
+    aInvertedHue[counter] = invertedHue;
+    aScaledHue[counter] = scaledHue;
+    aPreppedHue[counter] = preppedHue;
+    aCurrentHue[counter] = currentHue;
+    aMillis[counter] = millis();
+    counter += 1;
+  }
+  else if(!dumped)
+  {
+     serialMonitorDump();
+     dumped = true;
+     counter = 10000;
+  }
   // reset
   previousHue = rh;
   return currentHue;
+}
+
+void serialMonitorDump() {
+  // header
+  Serial.println(" ");
+  Serial.println("numerator,ratio,hue,invertedHue,scaledHue,preppedHue,currentHue,millisecond" );
+  // strings and floats do not play well on arduino
+  //  http://forum.arduino.cc/index.php/topic,146638.0.html
+  for (int i = 0; i < DEBUG_COUNTER; i++)
+  {
+    Serial.print(aNumerator[i]);
+    Serial.print(",");
+    Serial.print(aRatio[i]);
+    Serial.print(",");
+    Serial.print(aHue[i]);
+    Serial.print(",");
+    Serial.print(aInvertedHue[i]);
+    Serial.print(",");
+    Serial.print(aScaledHue[i]);
+    Serial.print(",");
+    Serial.print(aPreppedHue[i]);
+    Serial.print(",");
+    Serial.print(aCurrentHue[i]);
+    Serial.print(",");
+    Serial.println(aMillis[i]);
+  }
+  Serial.println(" ");
+  int potLevel = analogRead(potPin);
+  Serial.print("# (static) potentiometer level: ");
+  Serial.println(potLevel);
 }
