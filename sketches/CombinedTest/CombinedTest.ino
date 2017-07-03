@@ -237,11 +237,13 @@ uint8_t prepareHue(int rh) {
 void serialMonitorDump() {
   // header
   Serial.println(" ");
-  Serial.println("numerator,ratio,hue,invertedHue,scaledHue,preppedHue,currentHue,millisecond" );
+  Serial.println("volts,numerator,ratio,hue,invertedHue,scaledHue,preppedHue,currentHue,millisecond" );
   // strings and floats do not play well on arduino
   //  http://forum.arduino.cc/index.php/topic,146638.0.html
   for (int i = 0; i < DEBUG_COUNTER; i++)
   {
+    Serial.print(aVolts[i]);
+    Serial.print(",");
     Serial.print(aNumerator[i]);
     Serial.print(",");
     Serial.print(aRatio[i]);
