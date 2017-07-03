@@ -1,0 +1,18 @@
+# notes.txt
+# what have you
+
+
+# MODES
+
+16 slots divided into 4 groups of 4
+0-3 single color
+4-7 multi color
+8-B mic
+C-F use programming logic
+
+# HARDWARE
+
+- display for mode ID
+- button to change mode
+- pot to change something
+
