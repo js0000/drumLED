@@ -15,9 +15,10 @@
 // BEGIN CONFIG VARIABLES
 
 // Sample window width in mS (50 mS = 20Hz)
-const int sampleWindow = 50;
-const double maxVolts = 2.1;
-const double minVolts = 0.1;
+const int sampleWindow = 200;
+// anything below this is considered silence
+const double voltFloor = 0.05;
+// auto off time out
 const unsigned long maxMillisBeforeTurningOff = 4000;
 // yellow = 60
 // this is for the max volume hue
@@ -35,6 +36,12 @@ CRGB leds[NUM_LEDS];
 
 // STATE VARIABLES
 
+// this is changeable (can increase)
+// allows for more coverage of color spectrum
+double maxVolts = 0.6;
+// also chageable for the same reasons
+int maxRawHue = 192;
+int minRawHue = 32;
 unsigned int sample;
 uint8_t previousHue = 0;
 uint8_t previousSaturation = 0;
@@ -64,7 +71,7 @@ void setup() {
   FastLED.addLeds<NEOPIXEL, LED_PIN>(leds, NUM_LEDS);
   pinMode(MIC_PIN, INPUT);
   pinMode(POT_PIN, INPUT);
-  Serial.begin( 9600 );
+  Serial.begin(9600);
 }
 
 void loop() {
@@ -79,15 +86,14 @@ void combinedTest() {
   uint8_t hue = previousHue;
 
   double rawVolts = readPeakToPeak();
-  //double cookedVolts = applyPotFilter(rawVolts);
-  //int rawHue = voltsToHue(cookedVolts);
-  int rawHue = voltsToHue(rawVolts);
+  double cookedVolts = applyPotFilter(rawVolts);
+  int rawHue = voltsToHue(cookedVolts);
 
   if(rawHue != 0)
   {
     hue = prepareHue(rawHue);
     // these are the default values for showing a color
-    saturation = 255;
+    saturation = 128;
     value = 128;
     lastSampleAboveMinVolts = millis();
   }
@@ -107,7 +113,8 @@ void combinedTest() {
   // only update LEDS if there is a change
   if(previousHue != hue || previousSaturation != saturation || previousValue != value)
   {
-    for(int i = 0; i < NUM_LEDS; i++) {
+    for(int i = 0; i < NUM_LEDS; i++)
+    {
       leds[i] = CHSV(hue, saturation, value);
     }
     FastLED.show();
@@ -161,20 +168,45 @@ double readPeakToPeak() {
 double applyPotFilter(double v) {
    int potLevel = analogRead(potPin);
    // double filter = (double) potLevel;
-   double filter = potLevel * (1.0 / 666.0);
+   double filter = potLevel / 666.0;
    double cookedVolts = v * filter;
    return cookedVolts;
 }
 
 
-// returns zero if below minVolts
+// returns zero if below voltFloor
 int voltsToHue(double v) {
   int h = 0;
-  if( v > minVolts)
+  if(v > voltFloor)
   {
-    double numerator = v * 255.0;
-    double ratio = numerator / maxVolts;
+    // recalibrate maxVolts if necessary
+    if(v > maxVolts)
+    {
+      maxVolts = v + 0.01;
+    }
+    double hueRange = maxRawHue - minRawHue;
+    double numerator = v * hueRange;
+    double voltRange = maxVolts - voltFloor;
+    double ratio = numerator / voltRange;
     h = round(ratio);
+
+    // update if necessary
+    if(h > maxRawHue)
+    {
+      maxRawHue = (h + 1);
+      if(maxRawHue > 255)
+      {
+        maxRawHue = 255;
+      }
+    }
+    else if(h < minRawHue)
+    {
+      minRawHue = (h - 1);
+      if(minRawHue < 0)
+      {
+        minRawHue = 0;
+      }
+    }
 
     // DEBUGGING
     if(counter < DEBUG_COUNTER)
@@ -195,11 +227,13 @@ int voltsToHue(double v) {
 // offsets so yellow is max
 uint8_t prepareHue(int rh) {
   boolean louder = true;
-  if(previousHue > rh) {
+  if(previousHue > rh)
+  {
       louder = false;
   }
   // make loudest 0
-  int invertedHue = 256 - rh;
+  int hueRange = maxRawHue - minRawHue;
+  int invertedHue = hueRange - rh;
   // scale to 128
   int scaledHue = invertedHue / 2;
   // 0-127 louder, 128-255 quieter
@@ -237,7 +271,7 @@ uint8_t prepareHue(int rh) {
 void serialMonitorDump() {
   // header
   Serial.println(" ");
-  Serial.println("volts,numerator,ratio,hue,invertedHue,scaledHue,preppedHue,currentHue,millisecond" );
+  Serial.println("volts,numerator,ratio,hue,invertedHue,scaledHue,preppedHue,currentHue,millisecond");
   // strings and floats do not play well on arduino
   //  http://forum.arduino.cc/index.php/topic,146638.0.html
   for (int i = 0; i < DEBUG_COUNTER; i++)
@@ -264,4 +298,10 @@ void serialMonitorDump() {
   int potLevel = analogRead(potPin);
   Serial.print("# (static) potentiometer level: ");
   Serial.println(potLevel);
+  Serial.print("# (mutable) maxVolts: ");
+  Serial.println(maxVolts);
+  Serial.print("# (mutable) maxRawHue: ");
+  Serial.println(maxRawHue);
+  Serial.print("# (mutable) minRawHue: ");
+  Serial.println(minRawHue);
 }
