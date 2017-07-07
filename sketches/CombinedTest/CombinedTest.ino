@@ -48,7 +48,7 @@ uint8_t previousSaturation = 0;
 // "value" is actually brightness
 uint8_t previousValue = 0;
 unsigned long lastSampleAboveMinVolts = 0;
-
+int maxPotLevel = 672;
 
 // DEBUGGING
 
@@ -62,7 +62,6 @@ int aPreppedHue[DEBUG_COUNTER];
 uint8_t aCurrentHue[DEBUG_COUNTER];
 long aMillis[DEBUG_COUNTER];
 int counter = 0;
-boolean dumped = false;
 
 
 // STOCK ARDUINO CALLS
@@ -93,7 +92,7 @@ void combinedTest() {
   {
     hue = prepareHue(rawHue);
     // these are the default values for showing a color
-    saturation = 128;
+    saturation = 255;
     value = 128;
     lastSampleAboveMinVolts = millis();
   }
@@ -166,11 +165,15 @@ double readPeakToPeak() {
 
 // use pot level as a gain 0-1.0;
 double applyPotFilter(double v) {
-   int potLevel = analogRead(potPin);
-   // double filter = (double) potLevel;
-   double filter = potLevel / 666.0;
-   double cookedVolts = v * filter;
-   return cookedVolts;
+  int potLevel = analogRead(potPin);
+  if(potLevel > maxPotLevel)
+  {
+    maxPotLevel = potLevel + 1;
+  }
+  double numerator = potLevel * 100.0;
+  double filter = numerator / maxPotLevel;
+  double cookedVolts = v * filter;
+  return cookedVolts;
 }
 
 
@@ -184,13 +187,8 @@ int voltsToHue(double v) {
     {
       maxVolts = v + 0.01;
     }
-    double hueRange = maxRawHue - minRawHue;
-    double numerator = v * hueRange;
-    double voltRange = maxVolts - voltFloor;
-    double ratio = numerator / voltRange;
-    h = round(ratio);
 
-    // update if necessary
+    // recalibrate rawHues if necessary
     if(h > maxRawHue)
     {
       maxRawHue = (h + 1);
@@ -207,6 +205,11 @@ int voltsToHue(double v) {
         minRawHue = 0;
       }
     }
+    double hueRange = maxRawHue - minRawHue;
+    double numerator = v * hueRange;
+    double voltRange = maxVolts - voltFloor;
+    double ratio = numerator / voltRange;
+    h = round(ratio);
 
     // DEBUGGING
     if(counter < DEBUG_COUNTER)
@@ -220,6 +223,7 @@ int voltsToHue(double v) {
   return h;
 }
 
+
 // prepares raw hue to be put on HSV color scheme
 // compares against previous value
 //   to determine which "side" of hue cirle
@@ -232,8 +236,7 @@ uint8_t prepareHue(int rh) {
       louder = false;
   }
   // make loudest 0
-  int hueRange = maxRawHue - minRawHue;
-  int invertedHue = hueRange - rh;
+  int invertedHue = maxRawHue - rh;
   // scale to 128
   int scaledHue = invertedHue / 2;
   // 0-127 louder, 128-255 quieter
@@ -257,11 +260,11 @@ uint8_t prepareHue(int rh) {
     aMillis[counter] = millis();
     counter += 1;
   }
-  else if(!dumped)
+  else
   {
      serialMonitorDump();
-     dumped = true;
-     counter = 10000;
+     // reset
+     counter = 0;
   }
   // reset
   previousHue = rh;
@@ -296,8 +299,10 @@ void serialMonitorDump() {
   }
   Serial.println(" ");
   int potLevel = analogRead(potPin);
-  Serial.print("# (static) potentiometer level: ");
+  Serial.print("# (current) potentiometer level: ");
   Serial.println(potLevel);
+  Serial.print("# (mutable) maxPotLevel: ");
+  Serial.println(maxPotLevel);
   Serial.print("# (mutable) maxVolts: ");
   Serial.println(maxVolts);
   Serial.print("# (mutable) maxRawHue: ");
