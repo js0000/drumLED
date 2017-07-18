@@ -22,7 +22,7 @@ Sound sensor is on A0
 
 #include <Adafruit_NeoPixel.h>
 #define LED_CONTROL_PIN 6
-#define LED_STRING_LENGTH 80
+#define LED_STRING_LENGTH 50
 #define NUM_LEDS LED_STRING_LENGTH
 CRGB leds[LED_STRING_LENGTH];
 
@@ -54,6 +54,10 @@ long interestingColors[] = {COLOR_BROWN, COLOR_ORANGE, COLOR_SALMON};
 #define MODE_CONTROL_POT_PIN A1
 #define MICROPHONE_PIN A2
 
+#define POT_1_PIN A0
+#define POT_2_PIN A1
+#define POT_3_PIN A3
+
 // fire defines
 #define FRAMES_PER_SECOND 60
 
@@ -63,6 +67,7 @@ MyButton modeButton(MODE_BUTTON_PIN);
 Potentiometer ControlPot(MODE_CONTROL_POT_PIN);
 Potentiometer BrightnessContol(BRIGHTNESS_POT_PIN);  // potentiometr a2 that controls the brightness of the strip
 Microphone audioMic(MICROPHONE_PIN);
+Potentiometer ThirdPot(POT_3_PIN);
 
 // Using Adafruit library....
 // Parameter 1 = number of pixels in strip
@@ -79,7 +84,6 @@ int stripSetOneColor(uint32_t color);
 
 int maxModes=10;
 
-int iCount =0;
 
 // SETUPS
 
@@ -95,18 +99,16 @@ void setup() {
 }
 
 void loop() {
-int mode;
-int value;
+int Value;
         int R,G,B;
         int color=COLOR_WHITE;
-      
-  static int count=4;
+      // Startup mode value (count)
+  static int mode=1;
   if ( modeButton.HasBeenPressed() == 1) 
-  {  count++;
-     if (count > 9) count = 0;
+  {  mode++;
+     if (mode > 15) mode = 0;
   }
-  segmentdisplay.Display(count); 
-  mode = count;
+  segmentdisplay.Display(mode); 
 
 
   int colorIndex = 3 * ControlPot.NormalizedPeek();
@@ -115,42 +117,82 @@ int value;
   static uint8_t hue=0; 
 
 int val = analogRead(MODE_CONTROL_POT_PIN);
-int satValue = min(255,map(val, 0, 666, 0, 255));
-
 int val2 = analogRead(BRIGHTNESS_POT_PIN);
-int brightnessValue = min(255, map(val2, 0, 666, 0, 255));
-int hueValue = brightnessValue;
+int val3 = analogRead(POT_3_PIN);
+
+//declare variable used switch statement
+int brightness = 0;
+int sat1;
+int hue1;
+int red;
+int green;
+int blue;
+
 switch (mode)
   {
      case 0:
-        FastLED.setBrightness(brightnessValue);
+        brightness = min(255, map(val2, 0, 666, 0, 255));
+        FastLED.setBrightness(brightness);
         stripSetOneColor(COLOR_WHITE);
      break;    
      case 1:   
         Serial.println(colorIndex);
-        FastLED.setBrightness(brightnessValue);
+        brightness = min(255, map(val2, 0, 666, 0, 255));
+        FastLED.setBrightness(brightness);
         stripSetOneColor(primaryColors[colorIndex]);
      break;
      case 2:
-        FastLED.setBrightness(brightnessValue);
+        brightness = min(255, map(val2, 0, 666, 0, 255));
+        FastLED.setBrightness(brightness);
         stripSetOneColor(secondaryColors[colorIndex]);
      break;
      case 3:
-        FastLED.setBrightness(brightnessValue);
+        brightness = min(255, map(val2, 0, 666, 0, 255));
+        FastLED.setBrightness(brightness);
         stripSetOneColor(interestingColors[colorIndex]);
      break;
      case 4:
-
-        // First, clear the existing led values
+        sat1 = min(255,map(val, 0, 666, 0, 255));
+        hue1 = min(255, map(val2, 0, 666, 0, 255));
+        brightness = min(255, map(val3, 0, 666, 0, 255));
+        
         FastLED.clear();
         for(int led = 0; led < LED_STRING_LENGTH; led++) { 
-            leds[led].setHSV( hueValue, satValue, 128);
+            leds[led].setHSV( hue1, sat1, brightness);
         }
         Serial.print("hue:");        
-        Serial.println(hueValue);
+        Serial.println(hue);
+        FastLED.setBrightness(255);
         FastLED.show();
         break;
      case 5:
+        red = min(255,map(val, 0, 666, 0, 255));
+        green = min(255, map(val2, 0, 666, 0, 255));
+        blue = min(255, map(val3, 0, 666, 0, 255));
+
+        // First, clear the existing led s
+        FastLED.clear();
+        for(int led = 0; led < LED_STRING_LENGTH; led++) { 
+            leds[led].setRGB( red, green, blue);
+        }
+        FastLED.show();
+        break;
+     case 6:
+        red = min(255,map(val, 0, 666, 0, 255));
+        green = min(255, map(val2, 0, 666, 0, 255));
+        blue = min(255, map(val3, 0, 666, 0, 255));
+
+        // First, clear the existing led s
+        FastLED.clear();
+        for(int led = 0; led < LED_STRING_LENGTH; led++) { 
+            leds[led].setRGB( red, green, blue);
+        }
+        brightness = audioMic.peakToPeak(50);
+        FastLED.setBrightness(brightness);
+        FastLED.show();
+        
+     break;
+     case 7:
   // Add entropy to random number generator; we use a lot of it.
   random16_add_entropy( random());
  
@@ -163,21 +205,12 @@ switch (mode)
   delay(1000 / FRAMES_PER_SECOND);
 #endif  ﻿
      break;
-     case 6:
-        stripSetOneColor(COLOR_YELLOW);
-     break;
-     case 7:
-        stripSetOneColor(COLOR_BROWN);
-     break;
      case 8:
       Serial.print("audioMic.peakToPeak(): ");
-      value=audioMic.peakToPeak(50);
-      Serial.println(value);
-      rainbowStrip(value);
+      Serial.println(audioMic.peakToPeak(50));
+      rainbowStrip(audioMic.peakToPeak(50));
       break;
      case 9:
-      value=audioMic.peakToPeak(50);
-      Serial.println(value);
         rainbowStrip(ControlPot.Peek());    
 //        Serial.println(" finished rainbowCycle ");
      break;
@@ -194,15 +227,15 @@ switch (mode)
   
 }
 
-void setTheBrightness(int PotValue)
+void setTheBrightness(int Pot)
 {
   static uint8_t brightness;
-  static int maximum_pot_value =781;  // arbitrary maximum value for this potentiometer
+  static int maximum_pot_ =781;  // arbitrary maximum  for this potentiometer
 
-  if (maximum_pot_value < PotValue)
-    maximum_pot_value = PotValue;
+  if (maximum_pot_ < Pot)
+    maximum_pot_ = Pot;
     
-  unsigned long tempBrightness = (PotValue *255.0)/maximum_pot_value;
+  unsigned long tempBrightness = (Pot *255.0)/maximum_pot_;
   tempBrightness = max(0, min(255, tempBrightness));
   if (brightness != tempBrightness)
   {
@@ -214,20 +247,20 @@ void setTheBrightness(int PotValue)
 
 void    checkBrightnessPot()
 {   
-  static int savedPotBValue = 0;
+  static int savedPotB = 0;
    
-   int potBValue =  BrightnessContol.Peek();    
+   int potB =  BrightnessContol.Peek();    
 
-  if (savedPotBValue != potBValue)
+  if (savedPotB != potB)
   {
-    savedPotBValue = potBValue;
-    setTheBrightness(savedPotBValue);
+    savedPotB = potB;
+    setTheBrightness(savedPotB);
     
   }
 }
 
 
-// Input a value 0 to 255 to get a color value.
+// Input a  0 to 255 to get a color .
 // The colours are a transition r - g - b - back to r.
 uint32_t Wheel(byte WheelPos) {
   if(WheelPos < 85) {
@@ -256,7 +289,7 @@ void rainbowStrip(int offset) {
   uint16_t i, j;
   double scale;
   int color;
-  unsigned int potentiometerValue;
+  unsigned int potentiometer;
   
    checkBrightnessPot();
 
@@ -368,7 +401,7 @@ CRGB HeatColor( uint8_t temperature)
   // equal 'thirds' of 64 units each.
   uint8_t t192 = scale8_video( temperature, 192);
  
-  // calculate a value that ramps up from
+  // calculate a  that ramps up from
   // zero to 255 in each 'third' of the scale.
   uint8_t heatramp = t192 & 0x3F; // 0..63
   heatramp <<= 2; // scale up to 0..252
