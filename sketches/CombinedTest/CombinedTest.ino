@@ -6,8 +6,8 @@
 
 #define NUM_LEDS 30
 #define LED_PIN 6
-#define MIC_PIN 0
-#define POT_PIN 2
+#define POT_PIN 1
+#define MIC_PIN 2
 
 #define DEBUG_COUNTER 32
 
