@@ -1,17 +1,17 @@
 number, description, potentiometer parameter
-0, changeable color, hue
-1, red, saturation/brightness
-2, green, saturation/brightness
-3, blue, saturation/brightness
-4, rainbow, rotation speed
-5, fire, intensity
-6, inverted rainbow, rotation speed
-7,,
-8, hue from amplitude, microphone sensitivity
-9, saturation = amplitude in indigo (or another psychedelic color), microphone sensitivity
-A, log of hue from amplitude (adding 1 LED each stroke), microphone sensitivity
-B, log of saturation from amplitude in indigo (or another psychedelic color and adding 1 LED each stroke), mic sensitivity
-C, change to random solid hue every N hits, change frequency
-D, change to random CSV values (within ranges) every N hits, change frequency
-E,,
-F,,
+0x0, changeable color, hue
+0x1, red, brightness
+0x2, green, brightness
+0x3, blue, brightness
+0x4, rainbow, rotation speed
+0x5, fire, intensity
+0x6, inverted rainbow, rotation speed
+0x7,,
+0x8, hue changes with amplitude (all values), microphone sensitivity
+0x9, hue steps with amplitude (6 values), microphone sensitivity
+0xA, log of hue changes with amplitude (all values, add 1 LED each change), microphone sensitivity
+0xB, log of hue steps amplitude (6 values, add 1 each change), mic sensitivity
+0xC, change to random solid hue every N hits, change frequency
+0xD, change to random CSV values (within ranges) every N hits, change frequency
+0xE,,
+0xF, power gague, -
