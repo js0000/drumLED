@@ -2,6 +2,7 @@
  * CombinedTest.ino
  */
 
+
 #include "FastLED.h"
 
 #define NUM_LEDS 30
@@ -10,7 +11,6 @@
 #define MIC_PIN 2
 
 #define DEBUG_COUNTER 32
-
 
 // BEGIN CONFIG VARIABLES
 
