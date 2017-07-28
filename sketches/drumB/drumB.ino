@@ -45,6 +45,7 @@
 
 
 // GLOBALS
+CRGB leds[LED_NUM];
 
 // button
 const int bPinG = BUTTON_PIN;
@@ -54,7 +55,7 @@ int bValueG = 0x0;
 // display
 const int dStartPinG = D_1_PIN;
 const int dSegmentCountG= 7;
-const int dMatrixG[16][dSegmentCount] = {
+const int dMatrixG[16][dSegmentCountG] = {
     { 0,1,1,1,1,1,1 },  // = 0
     { 0,1,0,0,0,0,1 },  // = 1
     { 1,1,1,0,1,1,0 },  // = 2
@@ -176,7 +177,7 @@ void loop()
 int buttonGetValue()
 {
     bool pressed = buttonWasPressed();
-    int currentButtonValue = bValueG
+    int currentButtonValue = bValueG;
     if(pressed)
     {
         currentButtonValue += 0x1;
@@ -187,7 +188,7 @@ int buttonGetValue()
 
 bool buttonWasPressed()
 {
-    bool pressedState false;
+    bool pressedState = false;
     int currentState = digitalRead(bPinG);
     if(bPressedG)
     {
@@ -209,7 +210,7 @@ bool buttonWasPressed()
 
 
 // display
-void displayMode(m)
+void displayMode(int m)
 {
     Serial.print("mode: ");
     Serial.println(m);
@@ -306,7 +307,7 @@ void modeF()
     Serial.println("modeF called");
 }
 
-void modeFail(m)
+void modeFail(int m)
 {
     Serial.print("invalid mode passed in: ");
     Serial.println(m);
