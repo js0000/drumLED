@@ -1,23 +1,17 @@
-
-#include <Prototype.h>
-
 #include <Microphone.h>
 #include <Potentiometer.h>
-#include <SevenSegmentDisplay.h>
-#include <button.h>
-
 #include "FastLED.h"
 
 // Sound_to_light_with_control
 
-#define ONE_POT_BOARD 0
+
 /*
 Sound to light example
 
 segment display not implemented just yet.
 
 This is an example program to test the controls of the sound to light project.
-#define PROTOBOARD 1
+
 two potentiometers on 
 pin A1 used for modulating the current mode
 pin A2 used for setting the brighness 
@@ -27,17 +21,13 @@ Sound sensor is on A0
 
 
 #include <Adafruit_NeoPixel.h>
-
-#ifdef PROTOTYPE
-#define LED_CONTROL_PIN 6
-#else
 #define LED_CONTROL_PIN 3
-#endif
-
-#define LED_STRING_LENGTH 100
+#define LED_STRING_LENGTH 50
 #define NUM_LEDS LED_STRING_LENGTH
 CRGB leds[LED_STRING_LENGTH];
 
+#include <SevenSegmentDisplay.h>
+#include <button.h>
 
 #define COLOR_WHITE	0xFFFFFF
 
@@ -57,15 +47,8 @@ long secondaryColors[] = {COLOR_CYAN, COLOR_MAGENTA, COLOR_YELLOW};
 long interestingColors[] = {COLOR_BROWN, COLOR_ORANGE, COLOR_SALMON};
 
 //define the input pins that are attached to each control
-#ifdef PROTOTYPE 
-#define PROTOBOARD_PIN 2
-#define SEGMENT_DISPLAY_START_PIN 7
-#define SEGMENT_DISPLAY_POINT_PIN 3
-#else
 #define SEGMENT_DISPLAY_START_PIN 6
 #define SEGMENT_DISPLAY_POINT_PIN 9
-#endif
-
 #define MODE_BUTTON_PIN 4
 #define BRIGHTNESS_POT_PIN A0
   // mode control is the potentiometer control for each mode
@@ -108,11 +91,9 @@ void setup() {
   Serial.begin(9600);      // open the serial port at 9600 bps:    
   
   segmentdisplay.Display(0); 
-  segmentdisplay.SetDecimalPoint(0);
-
+  
   //FastLED strip
   FastLED.addLeds<NEOPIXEL, LED_CONTROL_PIN>(leds, LED_STRING_LENGTH);
-  
 }
 
 void loop() {
@@ -120,7 +101,7 @@ int Value;
         int R,G,B;
         int color=COLOR_WHITE;
       // Startup mode value (count)
-  static int mode=0;
+  static int mode=5;
   if ( modeButton.HasBeenPressed() == 1) 
   {  mode++;
      if (mode > 15) mode = 0;
@@ -134,7 +115,7 @@ int Value;
   static uint8_t hue=0; 
 
 int val = analogRead(MODE_CONTROL_POT_PIN);
-int val2 = analogRead(BRIGHTNESS_POT_PIN); // this is pot ONE
+int val2 = analogRead(BRIGHTNESS_POT_PIN);
 int val3 = analogRead(POT_3_PIN);
 
 //declare variable used switch statement
@@ -230,7 +211,6 @@ switch (mode)
      case 8:
 //      Serial.print("audioMic.peakToPeak(): ");
 //      Serial.println(audioMic.peakToPeak(50));
-
       rainbowStrip(audioMic.peakToPeak(50));
       break;
      case 9:
