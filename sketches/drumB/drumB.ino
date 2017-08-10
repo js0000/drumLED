@@ -168,7 +168,7 @@ void setup()
     pinMode(dInputPinG, INPUT);
     pinMode(dControlPinG, OUTPUT);
     pinMode(dPointPinG, OUTPUT);
-    for( int i = 0; i < dDigitArraySizeG; i++ )
+    for(int i = 0; i < dDigitArraySizeG; i++)
     {
         int displayPin = dStartPinG + i;
         pinMode(displayPin, OUTPUT);
@@ -346,12 +346,12 @@ void displayMode(int mode)
     int currentPin;
     int currentIndex;
     int state;
-    for( int i = 0; i < dDigitArraySizeG; i++ )
+    for(int i = 0; i < dDigitArraySizeG; i++)
     {
         currentPin = dStartPinG + i;
         currentIndex = dIndexOffsetG + i;
         state = dDigitMatrixG[mode][currentIndex];
-        if( currentPin != dPointPinG )
+        if(currentPin != dPointPinG)
         {
             digitalWrite(currentPin, state);
         }
