@@ -32,26 +32,24 @@
 // comment out the following if NOT using prototype board [3 pots]
 #define PROTOTYPE
 
+#define BUTTON_PIN 3
+#define MIC_PIN 2
+#define POT_PIN 1
+#define DISPLAY_CONTROL_PIN 0
+#define DISPLAY_INPUT_PIN 4
+#define LED_NUM 30
+
 #ifdef PROTOTYPE
-    #define PROTOBOARD_PIN 2
-    #define DISPLAY_START_PIN 7
     #define DISPLAY_POINT_PIN 3
+    #define DISPLAY_START_PIN 7
     #define LED_PIN 6
+    #define PROTOBOARD_PIN 2
 #else
-    #define DISPLAY_START_PIN 6
     #define DISPLAY_POINT_PIN 9
+    #define DISPLAY_START_PIN 6
     #define LED_PIN 3
 #endif
 
-#define DISPLAY_CONTROL_PIN 0
-#define DISPLAY_INPUT_PIN 4
-
-#define POT_PIN 1
-#define MIC_PIN 2
-#define BUTTON_PIN 3
-#define MODE_BUTTON_PIN 4
-
-#define LED_NUM 30
 
 
 // ======
@@ -64,6 +62,27 @@ const int bPinG = BUTTON_PIN;
 bool bPressedG = true;
 int bValueG = 0x0;
 
+// microphone
+// ------
+const int mPinG = MIC_PIN;
+
+// Sample window width in mS (50 mS = 20Hz)
+const int mSampleWindowG = 200;
+
+// anything below this is considered silence
+const double mVoltFloorG = 0.05;
+
+// this is changeable (can increase)
+// allows for more coverage of color spectrum
+double mMaxVoltsG = 0.6;
+
+// potentiometer
+// ------
+int pPinG = POT_PIN;
+
+// this will not be needed if we are using the same hardware
+int pMaxPotLevelG = 672;
+
 // display
 // ------
 const int dStartPinG = DISPLAY_START_PIN;
@@ -71,6 +90,18 @@ const int dControlPinG = DISPLAY_CONTROL_PIN;
 const int dInputPinG = DISPLAY_INPUT_PIN;
 const int dPointPinG = DISPLAY_POINT_PIN;
 const int dDigitArraySizeG = 8;
+
+/*
+
+    dDigitMatrixG bit map
+
+        4
+    3       5
+        6
+    2       0
+        1
+
+*/
 
 #ifdef PROTOTYPE
     const int dIndexOffsetG = 1;
@@ -116,17 +147,6 @@ const int dDigitArraySizeG = 8;
     };
 #endif
 
-/*
-dDigitMatrixG bit map
-
-    4
-3       5
-    6
-2       0
-    1
-
-*/
-
 // led
 // ------
 const int lPinG = LED_PIN;
@@ -134,27 +154,6 @@ const int lNumG = LED_NUM;
 
 // fastLED data structure
 CRGB ledsG[LED_NUM];
-
-// microphone
-// ------
-const int mPinG = MIC_PIN;
-
-// Sample window width in mS (50 mS = 20Hz)
-const int mSampleWindowG = 200;
-
-// anything below this is considered silence
-const double mVoltFloorG = 0.05;
-
-// this is changeable (can increase)
-// allows for more coverage of color spectrum
-double mMaxVoltsG = 0.6;
-
-// potentiometer
-// ------
-int pPinG = POT_PIN;
-
-// this will not be needed if we are using the same hardware
-int pMaxPotLevelG = 672;
 
 
 // ======
@@ -164,6 +163,8 @@ int pMaxPotLevelG = 672;
 void setup()
 {
     pinMode(bPinG, INPUT);
+    pinMode(mPinG, INPUT);
+    pinMode(pPinG, INPUT);
     pinMode(dInputPinG, INPUT);
     pinMode(dControlPinG, OUTPUT);
     pinMode(dPointPinG, OUTPUT);
@@ -172,11 +173,10 @@ void setup()
         int displayPin = dStartPinG + i;
         pinMode(displayPin, OUTPUT);
     }
-    pinMode(mPinG, INPUT);
-    pinMode(pPinG, INPUT);
-    Serial.begin(9600);
 
     FastLED.addLeds<NEOPIXEL, lPinG>(ledsG, lNumG);
+
+    Serial.begin(9600);
 }
 
 void loop()
@@ -246,7 +246,7 @@ void loop()
 // HARDWARE
 // ======
 
-// buttons
+// button
 // ------
 int buttonGetValue()
 {
@@ -280,33 +280,6 @@ bool buttonWasPressed()
         }
     }
     return pressedState;
-}
-
-
-// display
-// ------
-// takes mode number and changes display to match
-void displayMode(int mode)
-{
-    int currentPin;
-    int currentIndex;
-    int state;
-    for( int i = 0; i < dDigitArraySizeG; i++ )
-    {
-        currentPin = dStartPinG + i;
-        currentIndex = dIndexOffsetG + i;
-        state = dDigitMatrixG[mode][currentIndex];
-        if( currentPin != dPointPinG )
-        {
-            digitalWrite(currentPin, state);
-        }
-    }
-}
-
-// true = on
-void setDisplayPoint(bool d)
-{
-    digitalWrite(dPointPinG, d);
 }
 
 // microphone
@@ -363,6 +336,32 @@ double applyPotFilter(double v)
     double filter = numerator / pMaxPotLevelG;
     double cookedValue = v * filter;
     return cookedValue;
+}
+
+// display
+// ------
+// takes mode number and changes display to match
+void displayMode(int mode)
+{
+    int currentPin;
+    int currentIndex;
+    int state;
+    for( int i = 0; i < dDigitArraySizeG; i++ )
+    {
+        currentPin = dStartPinG + i;
+        currentIndex = dIndexOffsetG + i;
+        state = dDigitMatrixG[mode][currentIndex];
+        if( currentPin != dPointPinG )
+        {
+            digitalWrite(currentPin, state);
+        }
+    }
+}
+
+// true = on
+void setDisplayPoint(bool d)
+{
+    digitalWrite(dPointPinG, d);
 }
 
 
