@@ -1,10 +1,9 @@
 name, production, dev0, notes
-BUTTON_PIN, 3, -,
-MIC_PIN, 2, -,
-POT_PIN, 1, -,
+BUTTON_PIN, 4, -, also MODE_BUTTON_PIN
+MIC_PIN, 2, -, also MICROPHONE_PIN
+POT_PIN, 1, -, also MODE_CONTROL_POT_PIN and POT_2_PIN
 DISPLAY_CONTROL_PIN, 0, -,
 DISPLAY_INDEX_OFFSET, 0, 1, for accessing display matrix
-DISPLAY_INPUT_PIN, 4, -,
 DISPLAY_POINT_PIN, 9, 3, changed
 DISPLAY_START_PIN, 6, 7, changed
 LED_NUM, 60, 30, how many LEDs in string

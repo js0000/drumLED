@@ -36,7 +36,6 @@
 #define MIC_PIN 2
 #define POT_PIN 1
 #define DISPLAY_CONTROL_PIN 0
-#define DISPLAY_INPUT_PIN 4
 #define LED_NUM 30
 
 #ifdef DEV0
@@ -89,7 +88,6 @@ int pPinG = POT_PIN;
 const int dControlPinG = DISPLAY_CONTROL_PIN;
 const int dDigitArraySizeG = 8;
 const int dIndexOffsetG = DISPLAY_INDEX_OFFSET;
-const int dInputPinG = DISPLAY_INPUT_PIN;
 const int dPointPinG = DISPLAY_POINT_PIN;
 const int dStartPinG = DISPLAY_START_PIN;
 
@@ -165,7 +163,6 @@ void setup()
     pinMode(bPinG, INPUT);
     pinMode(mPinG, INPUT);
     pinMode(pPinG, INPUT);
-    pinMode(dInputPinG, INPUT);
     pinMode(dControlPinG, OUTPUT);
     pinMode(dPointPinG, OUTPUT);
     for(int i = 0; i < dDigitArraySizeG; i++)
