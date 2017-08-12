@@ -30,7 +30,7 @@
 #include "FastLED.h"
 
 // comment out the following if NOT using prototype board [3 pots]
-#define PROTOTYPE
+#define DEV0
 
 #define BUTTON_PIN 3
 #define MIC_PIN 2
@@ -39,12 +39,14 @@
 #define DISPLAY_INPUT_PIN 4
 #define LED_NUM 30
 
-#ifdef PROTOTYPE
+#ifdef DEV0
+    #define DISPLAY_INDEX_OFFSET 1
     #define DISPLAY_POINT_PIN 3
     #define DISPLAY_START_PIN 7
     #define LED_PIN 6
     #define PROTOBOARD_PIN 2
 #else
+    #define DISPLAY_INDEX_OFFSET 0
     #define DISPLAY_POINT_PIN 9
     #define DISPLAY_START_PIN 6
     #define LED_PIN 3
@@ -78,18 +80,18 @@ double mMaxVoltsG = 0.6;
 
 // potentiometer
 // ------
-int pPinG = POT_PIN;
-
 // this will not be needed if we are using the same hardware
 int pMaxPotLevelG = 672;
+int pPinG = POT_PIN;
 
 // display
 // ------
-const int dStartPinG = DISPLAY_START_PIN;
 const int dControlPinG = DISPLAY_CONTROL_PIN;
+const int dDigitArraySizeG = 8;
+const int dIndexOffsetG = DISPLAY_INDEX_OFFSET;
 const int dInputPinG = DISPLAY_INPUT_PIN;
 const int dPointPinG = DISPLAY_POINT_PIN;
-const int dDigitArraySizeG = 8;
+const int dStartPinG = DISPLAY_START_PIN;
 
 /*
 
@@ -103,8 +105,7 @@ const int dDigitArraySizeG = 8;
 
 */
 
-#ifdef PROTOTYPE
-    const int dIndexOffsetG = 1;
+#ifdef DEV0
     const int dDigitMatrixG[16][dDigitArraySizeG] = {
         //7 6 5 4 3 2 1 0
         { 0,0,1,1,1,1,1,1 },  // = 0
@@ -125,7 +126,6 @@ const int dDigitArraySizeG = 8;
         { 0,1,0,1,1,1,0,0 }   // = F
     };
 #else
-    const int dIndexOffsetG = 1;
     const int dDigitMatrixG[16][dDigitArraySizeG] = {
         //7 6 5 4 3 2 1 0
         { 1,1,1,0,1,1,1,0 },  // = 0
