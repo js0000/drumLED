@@ -29,19 +29,14 @@
 
 #include "FastLED.h"
 
-// comment out the following if NOT using prototype board [3 pots]
-
 #define BUTTON_PIN 4
 #define MIC_PIN 2
 #define POT_PIN 1
 #define DISPLAY_CONTROL_PIN 0
 #define LED_NUM 30
-
-#define DISPLAY_INDEX_OFFSET 0
 #define DISPLAY_POINT_PIN 9
 #define DISPLAY_START_PIN 6
 #define LED_PIN 3
-
 
 
 // ======
@@ -69,58 +64,58 @@ const double mVoltFloorG = 0.05;
 double mMaxVoltsG = 0.6;
 
 // potentiometer
-// ------
-// this will not be needed if we are using the same hardware
-int pMaxPotLevelG = 672;
+// -------------
 int pPinG = POT_PIN;
+// pMaxPotLevelG will not be needed with standardized hardware
+int pMaxPotLevelG = 672;
 
 // display
 // ------
 const int dControlPinG = DISPLAY_CONTROL_PIN;
-const int dDigitArraySizeG = 8;
-const int dIndexOffsetG = DISPLAY_INDEX_OFFSET;
+const int dDigitArraySizeG = 7;
 const int dPointPinG = DISPLAY_POINT_PIN;
 const int dStartPinG = DISPLAY_START_PIN;
+const int dDigitMatrixG[16][dDigitArraySizeG] = {
+    //0 1 2 3 4 5 6
+    { 1,1,1,1,1,1,0 },  // = 0
+    { 0,0,1,1,0,0,0 },  // = 1
+    { 1,1,0,1,1,0,1 },  // = 2
+    { 0,1,1,1,1,0,1 },  // = 3
+    { 0,0,1,1,0,1,1 },  // = 4
+    { 0,1,1,0,1,1,1 },  // = 5
+    { 1,1,1,0,1,1,1 },  // = 6
+    { 0,0,1,1,1,0,0 },  // = 7
+    { 1,1,1,1,1,1,1 },  // = 8
+    { 0,1,1,1,1,1,1 },  // = 9
+    { 1,0,1,1,1,1,1 },  // = A
+    { 1,1,1,0,0,1,1 },  // = b
+    { 1,1,0,0,0,0,1 },  // = c
+    { 1,1,1,1,0,0,1 },  // = d
+    { 1,1,0,0,1,1,1 },  // = E
+    { 1,0,0,0,1,1,1 }   // = F
+};
 
 /*
-
     dDigitMatrixG bit map
 
         4
-    3       5
+    5       3
         6
-    2       0
+    0       2
         1
-
 */
 
-const int dDigitMatrixG[16][dDigitArraySizeG] = {
-    //7 6 5 4 3 2 1 0
-    { 1,1,1,0,1,1,1,0 },  // = 0
-    { 0,0,1,0,1,0,0,0 },  // = 1
-    { 1,1,0,0,1,1,0,1 },  // = 2
-    { 0,1,1,0,1,1,0,1 },  // = 3
-    { 0,0,1,0,1,0,1,1 },  // = 4
-    { 0,1,1,0,0,1,1,1 },  // = 5
-    { 1,1,1,0,0,1,1,1 },  // = 6
-    { 0,0,1,0,1,1,0,0 },  // = 7
-    { 1,1,1,0,1,1,1,1 },  // = 8
-    { 0,0,1,0,1,1,1,1 },  // = 9
-    { 1,0,1,0,1,1,1,1 },  // = A
-    { 1,1,1,0,0,0,1,1 },  // = 8
-    { 1,1,0,0,0,0,0,1 },  // = C
-    { 1,1,1,0,1,0,0,1 },  // = d
-    { 1,1,0,0,0,1,1,1 },  // = e
-    { 1,0,0,0,0,1,1,1 },  // = f
-};
-
 // led
-// ------
+// ---
 const int lPinG = LED_PIN;
 const int lNumG = LED_NUM;
 
 // fastLED data structure
 CRGB ledsG[LED_NUM];
+
+// mode history
+// ----
+int previousModeG = 0;
 
 
 // ======
@@ -133,8 +128,9 @@ void setup()
     pinMode(mPinG, INPUT);
     pinMode(pPinG, INPUT);
     pinMode(dControlPinG, OUTPUT);
-    pinMode(dPointPinG, OUTPUT);
-    for(int i = 0; i < dDigitArraySizeG; i++)
+
+    // <= because point pin is embedded
+    for(int i = 0; i <= dDigitArraySizeG; i++)
     {
         int displayPin = dStartPinG + i;
         pinMode(displayPin, OUTPUT);
@@ -142,69 +138,83 @@ void setup()
 
     FastLED.addLeds<NEOPIXEL, lPinG>(ledsG, lNumG);
 
+    // initialize
+    setDisplayPoint(0);
+    displayMode(0);
+    mode0();
+
+    // FIXME: remove this before prod
     Serial.begin(9600);
 }
 
 void loop()
 {
     int mode = buttonGetValue();
-    //displayMode(mode);
-    switch(mode)
+    if(mode != previousModeG)
     {
-        case 0:
-            mode0();
-            break;
-        case 1:
-            mode1();
-            break;
-        case 2:
-            mode2();
-            break;
-        case 3:
-            mode3();
-            break;
-        case 4:
-            mode4();
-            break;
-        case 5:
-            mode5();
-            break;
-        case 6:
-            mode6();
-            break;
-        case 7:
-            mode7();
-            break;
-        case 8:
-            mode8();
-            break;
-        case 9:
-            mode9();
-            break;
-        case 10:
-            modeA();
-            break;
-        case 11:
-            modeB();
-            break;
-        case 12:
-            modeC();
-            break;
-        case 13:
-            modeD();
-            break;
-        case 14:
-            modeE();
-            break;
-        case 15:
-            modeF();
-            break;
-        default:
-            modeFail(mode);
+        previousModeG = mode;
+        displayMode(mode);
+        switch(mode)
+        {
+            case 0:
+                mode0();
+                break;
+            case 1:
+                mode1();
+                break;
+            case 2:
+                mode2();
+                break;
+            case 3:
+                mode3();
+                break;
+            case 4:
+                mode4();
+                break;
+            case 5:
+                mode5();
+                break;
+            case 6:
+                mode6();
+                break;
+            case 7:
+                mode7();
+                break;
+            case 8:
+                mode8();
+                break;
+            case 9:
+                mode9();
+                break;
+            case 10:
+                modeA();
+                break;
+            case 11:
+                modeB();
+                break;
+            case 12:
+                modeC();
+                break;
+            case 13:
+                modeD();
+                break;
+            case 14:
+                modeE();
+                break;
+            case 15:
+                modeF();
+                break;
+            default:
+                modeFail(mode);
+        }
+
+        // FIXME: remove before prod
+        // this just separates mode changes by blank line
+        Serial.println("");
     }
 
-    // FIXME: remove, this is only for testing meta-code
-    Serial.println("");
+    // FIXME: remove before prod
+    // avoids data firehose effect
     delay(1000);
 }
 
@@ -217,13 +227,13 @@ void loop()
 // ------
 int buttonGetValue()
 {
-    int currentButtonValue = bValueG;
     bool pressed = buttonWasPressed();
     if(pressed)
     {
+        int currentButtonValue = bValueG;
         currentButtonValue += 1;
+        bValueG = currentButtonValue % 16;
     }
-    bValueG = currentButtonValue % 16;
     return bValueG;
 }
 
@@ -306,23 +316,43 @@ void displayMode(int mode)
 {
     int currentPin;
     int currentIndex;
+    int matrixElement;
     int state;
-    for(int i = 0; i < dDigitArraySizeG; i++)
+    for(int i = 0; i <= dDigitArraySizeG; i++)
     {
         currentPin = dStartPinG + i;
-        currentIndex = dIndexOffsetG + i;
-        state = dDigitMatrixG[mode][currentIndex];
-        if(currentPin != dPointPinG)
+        if(currentPin < dPointPinG)
         {
-            digitalWrite(currentPin, state);
+            currentIndex = i;
         }
+        else if(currentPin == dPointPinG)
+        {
+            continue;
+        }
+        else
+        {
+            currentIndex = i - 1;
+        }
+
+        matrixElement = dDigitMatrixG[mode][currentIndex];
+        state = 0;
+        if(matrixElement == 0 )
+        {
+            state = 1;
+        }
+        digitalWrite(currentPin, state);
     }
 }
 
-// true = on
-void setDisplayPoint(bool d)
+// 1 on, 0 off
+void setDisplayPoint(int display)
 {
-    digitalWrite(dPointPinG, d);
+    int state = 1;
+    if(display == 1)
+    {
+        state = 0;
+    }
+    digitalWrite(dPointPinG, state);
 }
 
 
