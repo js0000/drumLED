@@ -22,26 +22,26 @@
 
 */
 
-
-// ======
-// DEFINES
-// ======
-
 #include "FastLED.h"
+
+
+// =======
+// DEFINES
+// =======
 
 #define BUTTON_PIN 4
 #define MIC_PIN 2
-#define POT_PIN 1
+#define POT_PIN A0
 #define DISPLAY_CONTROL_PIN 0
-#define LED_NUM 30
 #define DISPLAY_POINT_PIN 9
 #define DISPLAY_START_PIN 6
 #define LED_PIN 3
+#define LED_NUM 30
 
 
-// ======
+// =======
 // GLOBALS
-// ======
+// =======
 
 // button
 // ------
@@ -50,7 +50,7 @@ bool bPressedG = false;
 int bValueG = 0;
 
 // microphone
-// ------
+// ----------
 const int mPinG = MIC_PIN;
 
 // Sample window width in mS (50 mS = 20Hz)
@@ -65,16 +65,16 @@ double mMaxVoltsG = 0.6;
 
 // potentiometer
 // -------------
-int pPinG = POT_PIN;
+const int pPinG = POT_PIN;
 // pMaxPotLevelG will not be needed with standardized hardware
 int pMaxPotLevelG = 672;
 
 // display
 // ------
 const int dControlPinG = DISPLAY_CONTROL_PIN;
-const int dDigitArraySizeG = 7;
 const int dPointPinG = DISPLAY_POINT_PIN;
 const int dStartPinG = DISPLAY_START_PIN;
+const int dDigitArraySizeG = 7;
 const int dDigitMatrixG[16][dDigitArraySizeG] = {
     //0 1 2 3 4 5 6
     { 1,1,1,1,1,1,0 },  // = 0
@@ -109,18 +109,23 @@ const int dDigitMatrixG[16][dDigitArraySizeG] = {
 // ---
 const int lPinG = LED_PIN;
 const int lNumG = LED_NUM;
+const float fColorStepG = 255.0 / (float) lNumG;
+const uint8_t colorStepG = (int) fColorStepG;
 
 // fastLED data structure
-CRGB ledsG[LED_NUM];
+CRGB ledsG[lNumG];
 
-// mode history
-// ----
+// history
+// -------
+bool alwaysUpdateG = false;
 int previousModeG = 0;
+float previousPotG;
+int previousMillisG = 0;
+uint8_t previousHueG = 0;
 
-
-// ======
+// =======
 // ARDUINO
-// ======
+// =======
 
 void setup()
 {
@@ -129,7 +134,9 @@ void setup()
     pinMode(pPinG, INPUT);
     pinMode(dControlPinG, OUTPUT);
 
-    // <= because point pin is embedded
+    // <= i instead of < i
+    // due to inclusion of point pin
+    // which is not accounted for in dDigitArraySizeG
     for(int i = 0; i <= dDigitArraySizeG; i++)
     {
         int displayPin = dStartPinG + i;
@@ -141,7 +148,8 @@ void setup()
     // initialize
     setDisplayPoint(0);
     displayMode(0);
-    mode0();
+    previousPotG = potentiometerScaledValue();
+    mode0(previousPotG);
 
     // FIXME: remove this before prod
     Serial.begin(9600);
@@ -150,59 +158,78 @@ void setup()
 void loop()
 {
     int mode = buttonGetValue();
+    float pot = potentiometerScaledValue();
+    boolean updateMode = false;
     if(mode != previousModeG)
     {
+       updateMode = true;
+    }
+    else if(pot != previousPotG)
+    {
+        updateMode = true;
+
+        // DEBUG
+        Serial.print("pot: ");
+        Serial.println(pot);
+    }
+    else if(alwaysUpdateG)
+    {
+        updateMode = true;
+    }
+    if(updateMode)
+    {
         previousModeG = mode;
+        previousPotG = pot;
         displayMode(mode);
         switch(mode)
         {
             case 0:
-                mode0();
+                mode0(pot);
                 break;
             case 1:
-                mode1();
+                mode1(pot);
                 break;
             case 2:
-                mode2();
+                mode2(pot);
                 break;
             case 3:
-                mode3();
+                mode3(pot);
                 break;
             case 4:
-                mode4();
+                mode4(pot);
                 break;
             case 5:
-                mode5();
+                mode5(pot);
                 break;
             case 6:
-                mode6();
+                mode6(pot);
                 break;
             case 7:
-                mode7();
+                mode7(pot);
                 break;
             case 8:
-                mode8();
+                mode8(pot);
                 break;
             case 9:
-                mode9();
+                mode9(pot);
                 break;
             case 10:
-                modeA();
+                modeA(pot);
                 break;
             case 11:
-                modeB();
+                modeB(pot);
                 break;
             case 12:
-                modeC();
+                modeC(pot);
                 break;
             case 13:
-                modeD();
+                modeD(pot);
                 break;
             case 14:
-                modeE();
+                modeE(pot);
                 break;
             case 15:
-                modeF();
+                modeF(pot);
                 break;
             default:
                 modeFail(mode);
@@ -254,7 +281,7 @@ bool buttonWasPressed()
 }
 
 // microphone
-// ------
+// ----------
 // pretty much stolen from adafruit
 // https://learn.adafruit.com/adafruit-microphone-amplifier-breakout/measuring-sound-levels
 double readPeakToPeak()
@@ -294,19 +321,17 @@ double readPeakToPeak()
 }
 
 // potentiometer
-// ------
-// use pot level as a gain 0-1.0;
-double applyPotFilter(double v)
+// -------------
+// scaled from 0 - 1
+float potentiometerScaledValue()
 {
     int potLevel = analogRead(pPinG);
     if(potLevel > pMaxPotLevelG)
     {
         pMaxPotLevelG = potLevel + 1;
     }
-    double numerator = potLevel * 100.0;
-    double filter = numerator / pMaxPotLevelG;
-    double cookedValue = v * filter;
-    return cookedValue;
+    float ratio = (float) potLevel / (float) pMaxPotLevelG;
+    return ratio;
 }
 
 // display
@@ -360,82 +385,152 @@ void setDisplayPoint(int display)
 // MODES
 // ======
 
-void mode0()
+// hue changes with pot
+void mode0(float p)
 {
-    Serial.println("mode0 called");
+    alwaysUpdateG = false;
+
+    // brightness at half
+    uint8_t value = 127;
+    uint8_t saturation = 255;
+    float fHue = 255.0 * p;
+    uint8_t hue = (int) fHue;
+    for(int i = 0; i < lNumG; i++)
+    {
+        ledsG[i] = CHSV(hue, saturation, value);
+    }
+    FastLED.show();
 }
 
-void mode1()
+// red, brightness changes with pot
+void mode1(float p)
 {
-    Serial.println("mode1 called");
+    alwaysUpdateG = false;
+
+    float fValue = 255.0 * p;
+    uint8_t value = (int) fValue;
+    uint8_t saturation = 255;
+    uint8_t hue = 0;
+    for(int i = 0; i < lNumG; i++)
+    {
+        ledsG[i] = CHSV(hue, saturation, value);
+    }
+    FastLED.show();
 }
 
-void mode2()
+// green, brightness changes with pot
+void mode2(float p)
 {
-    Serial.println("mode2 called");
+    alwaysUpdateG = false;
+
+    float fValue = 255.0 * p;
+    uint8_t value = (int) fValue;
+    uint8_t saturation = 255;
+    // 120 / 360 scaled to 85 / 255
+    uint8_t hue = 85;
+    for(int i = 0; i < lNumG; i++)
+    {
+        ledsG[i] = CHSV(hue, saturation, value);
+    }
+    FastLED.show();
 }
 
-void mode3()
+// blue, brightness changes with pot
+void mode3(float p)
 {
-    Serial.println("mode3 called");
+    alwaysUpdateG = false;
+
+    float fValue = 255.0 * p;
+    uint8_t value = (int) fValue;
+    uint8_t saturation = 255;
+    // 240 / 360 scaled to 170 / 255
+    uint8_t hue = 170;
+    for(int i = 0; i < lNumG; i++)
+    {
+        ledsG[i] = CHSV(hue, saturation, value);
+    }
+    FastLED.show();
 }
 
-void mode4()
+// rainbow, pot controls rotation
+void mode4(float p)
 {
-    Serial.println("mode4 called");
+    alwaysUpdateG = true;
+    int currentMillis = millis();
+    float fDelayMillis = 1000.0 * p;
+    int delayMillis = (int) fDelayMillis;
+    int offsetMillis = currentMillis - previousMillisG;
+    if(offsetMillis > delayMillis)
+    {
+        uint8_t value = 127;
+        uint8_t saturation = 255;
+        uint8_t hue = previousHueG;
+        for(int i = 0; i < lNumG; i++)
+        {
+            uint8_t tempHue = hue + colorStepG;
+            hue = tempHue % 255;
+            ledsG[i] = CHSV(hue, saturation, value);
+            if(i == 0)
+            {
+                 previousHueG = hue;
+            }
+        }
+        FastLED.show();
+    }
+    previousMillisG = currentMillis;
 }
 
-void mode5()
+void mode5(float p)
 {
     Serial.println("mode5 called");
 }
 
-void mode6()
+void mode6(float p)
 {
     Serial.println("mode6 called");
 }
 
-void mode7()
+void mode7(float p)
 {
     Serial.println("mode7 called");
 }
 
-void mode8()
+void mode8(float p)
 {
     Serial.println("mode8 called");
 }
 
-void mode9()
+void mode9(float p)
 {
     Serial.println("mode9 called");
 }
 
-void modeA()
+void modeA(float p)
 {
     Serial.println("modeA called");
 }
 
-void modeB()
+void modeB(float p)
 {
     Serial.println("modeB called");
 }
 
-void modeC()
+void modeC(float p)
 {
     Serial.println("modeC called");
 }
 
-void modeD()
+void modeD(float p)
 {
     Serial.println("modeD called");
 }
 
-void modeE()
+void modeE(float p)
 {
     Serial.println("modeE called");
 }
 
-void modeF()
+void modeF(float p)
 {
     Serial.println("modeF called");
 }
