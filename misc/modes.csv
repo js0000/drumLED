@@ -5,8 +5,8 @@ number, description, potentiometer parameter
 0x3, blue, brightness
 0x4, rainbow strip, rotation speed
 0x5, rainbow time, rotation speed
-0x6, fire, intensity
-0x7,,
+0x6, rainbow LED, rotation speed
+0x7, fire, sparking
 0x8, hue changes with amplitude (all hues), microphone sensitivity
 0x9, hue steps with amplitude (6 hues), microphone sensitivity
 0xA, log of hue changes with amplitude (all hues: add 1 LED each change), microphone sensitivity

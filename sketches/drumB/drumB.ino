@@ -114,6 +114,7 @@ const int dDigitMatrixG[16][dDigitArraySizeG] = {
 // ---
 const int lPinG = LED_PIN;
 const int lNumG = LED_NUM;
+const int lLastIndexG = lNumG - 1;
 uint8_t hueStepG;
 const int lDefaultValueG = DEFAULT_VALUE;
 const int lDefaultSaturationG = DEFAULT_SATURATION;
@@ -124,10 +125,12 @@ CRGB ledsG[lNumG];
 // history
 // -------
 bool alwaysUpdateG = false;
-int previousModeG = 0;
-float previousPotG;
+int savedModeG = 0;
+float savedPotG;
 int targetMillisG = 0;
-uint8_t previousHueG = 0;
+uint8_t savedHueG = 0;
+int savedLedG = 0;
+bool modeInitG = false;
 
 // =======
 // ARDUINO
@@ -161,11 +164,15 @@ void loop()
     float pot = potentiometerScaledValue();
 
     boolean updateMode = false;
-    if(mode != previousModeG)
+    if(mode != savedModeG)
     {
         updateMode = true;
+        modeInitG = false;
+
+        // a breath before switching modes
+        delay(500);
     }
-    else if(pot != previousPotG)
+    else if(pot != savedPotG)
     {
         updateMode = true;
     }
@@ -176,8 +183,8 @@ void loop()
 
     if(updateMode)
     {
-        previousModeG = mode;
-        previousPotG = pot;
+        savedModeG = mode;
+        savedPotG = pot;
         displayMode(mode);
         switch(mode)
         {
@@ -232,10 +239,6 @@ void loop()
             default:
                 modeFail(mode);
         }
-
-        // FIXME: remove before prod
-        // this just separates mode changes by blank line
-        Serial.println("");
     }
 
     // FIXME: remove before prod
@@ -393,12 +396,15 @@ void setupInit()
     }
     hueStepG = (int) fHueStepG;
 
-    // set previousPotG
-    previousPotG = potentiometerScaledValue();
-    
+    // set savedPotG
+    savedPotG = potentiometerScaledValue();
+
+    // Add entropy to random number generator; we use a lot of it.
+    random16_add_entropy(random());
+
     // start mode0
     displayMode(0);
-    mode0(previousPotG);
+    mode0(savedPotG);
 }
 
 void dark()
@@ -408,6 +414,78 @@ void dark()
         ledsG[i] = CHSV(0, 0, 0);
     }
     FastLED.show();
+}
+
+// stolen from https://github.com/FastLED/FastLED/blob/master/examples/Fire2012/Fire2012.ino
+
+// Fire2012 by Mark Kriegsman, July 2012
+// as part of "Five Elements" shown here: http://youtu.be/knWiGsmgycY
+////
+// This basic one-dimensional 'fire' simulation works roughly as follows:
+// There's a underlying array of 'heat' cells, that model the temperature
+// at each point along the line.  Every cycle through the simulation,
+// four steps are performed:
+//  1) All cells cool down a little bit, losing heat to the air
+//  2) The heat from each cell drifts 'up' and diffuses a little
+//  3) Sometimes randomly new 'sparks' of heat are added at the bottom
+//  4) The heat from each cell is rendered as a color into the leds array
+//     The heat-to-color mapping uses a black-body radiation approximation.
+//
+// Temperature is in arbitrary units from 0 (cold black) to 255 (white hot).
+//
+// This simulation scales it self a bit depending on NUM_LEDS; it should look
+// "OK" on anywhere from 20 to 100 LEDs without too much tweaking.
+//
+// I recommend running this simulation at anywhere from 30-100 frames per second,
+// meaning an interframe delay of about 10-35 milliseconds.
+//
+// Looks best on a high-density LED setup (60+ pixels/meter).
+
+
+void Fire2012(int fs)
+{
+    // There are two main parameters you can play with to control the look and
+    // feel of your fire: COOLING (used in step 1 above), and SPARKING (used
+    // in step 3 above).
+
+    // COOLING: How much does the air cool as it rises?
+    // Less cooling = taller flames.  More cooling = shorter flames.
+    // Default 50, suggested range 20-100
+    int fireCooling = 55;
+
+    int fireSparking = fs;
+
+    // Array of temperature readings at each simulation cell
+    static byte heat[lNumG];
+    bool gReverseDirection = false;
+
+    // Step 1.  Cool down every cell a little
+    for( int i = 0; i < lNumG; i++) {
+      heat[i] = qsub8( heat[i],  random8(0, ((fireCooling * 10) / lNumG) + 2));
+    }
+
+    // Step 2.  Heat from each cell drifts 'up' and diffuses a little
+    for( int k= lNumG - 1; k >= 2; k--) {
+      heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
+    }
+
+    // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
+    if( random8() < fireSparking ) {
+      int y = random8(7);
+      heat[y] = qadd8( heat[y], random8(160,255) );
+    }
+
+    // Step 4.  Map from heat cells to LED colors
+    for( int j = 0; j < lNumG; j++) {
+      CRGB color = HeatColor( heat[j]);
+      int pixelnumber;
+      if( gReverseDirection ) {
+        pixelnumber = (lNumG - 1) - j;
+      } else {
+        pixelnumber = j;
+      }
+      ledsG[pixelnumber] = color;
+    }
 }
 
 // ======
@@ -489,7 +567,7 @@ void mode3(float p)
     FastLED.show();
 }
 
-// rainbow loop
+// rainbow strip
 // pot controls rotation speed
 void mode4(float p)
 {
@@ -502,47 +580,104 @@ void mode4(float p)
     int currentMillis = millis();
     if(currentMillis > targetMillisG){
 
-        // recompute delay between refreshes
-        // max delay hardwired to 1000 (1 second)
+        // multiplying by 0 is bad!
         if(p < 0.01)
         {
             p = 0.01;
         }
+        // max delay hardwired to 1000 (1 second)
         float fDelayMillis = 1000.0 * p;
         targetMillisG = currentMillis + (int) fDelayMillis;
-        uint8_t hue = previousHueG;
+        uint8_t hue = savedHueG;
         for(int i = 0; i < lNumG; i++)
         {
-            uint8_t tempHue = hue + hueStepG;
-            hue = tempHue % 255;
+            int tmp = hue + hueStepG;
+            hue = tmp % 255;
             ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
             if(i == 0)
             {
-                 previousHueG = hue;
+                 savedHueG = hue;
             }
         }
         FastLED.show();
     }
 }
 
+// rainbow time
 void mode5(float p)
 {
     // DEBUG
     Serial.println("mode5 called");
 
     setDisplayPoint(false);
-    alwaysUpdateG = false;
-    dark();
+    alwaysUpdateG = true;
+
+    int currentMillis = millis();
+    if(currentMillis > targetMillisG){
+        if(p < 0.01)
+        {
+            p = 0.01;
+        }
+        float fDelayMillis = 1000.0 * p;
+        targetMillisG = currentMillis + (int) fDelayMillis;
+        int tmp = savedHueG + 1;
+        uint8_t hue = tmp % 255;
+        savedHueG = hue;
+        for(int i = 0; i < lNumG; i++)
+        {
+            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
+        }
+        FastLED.show();
+    }
 }
 
+// rainbow LED
+// single LED travels from start to end of strip
+// then increments color
 void mode6(float p)
 {
     // DEBUG
     Serial.println("mode6 called");
 
     setDisplayPoint(false);
-    alwaysUpdateG = false;
-    dark();
+    alwaysUpdateG = true;
+
+    if(!modeInitG)
+    {
+        dark();
+        modeInitG = true;
+    }
+
+    int currentMillis = millis();
+    if(currentMillis > targetMillisG)
+    {
+        if(p < 0.01)
+        {
+            p = 0.01;
+        }
+        float fDelayMillis = 1000.0 * p;
+        targetMillisG = currentMillis + (int) fDelayMillis;
+
+        // cycle through colors a bit faster this way
+        int tmp = savedHueG + 8;
+        uint8_t hue = tmp % 255;
+        tmp = savedLedG + 1;
+        int onLed = tmp % lNumG;
+        int offLed = onLed - 1;
+        if(onLed == 0)
+        {
+            offLed = lLastIndexG;
+        }
+        savedLedG = onLed;
+        ledsG[onLed] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
+        ledsG[offLed] = CHSV(hue, 0, 0);
+        FastLED.show();
+
+        if(onLed == lLastIndexG)
+        {
+            savedHueG = hue;
+        }
+    }
 }
 
 void mode7(float p)
@@ -551,8 +686,23 @@ void mode7(float p)
     Serial.println("mode7 called");
 
     setDisplayPoint(false);
-    alwaysUpdateG = false;
-    dark();
+    alwaysUpdateG = true;
+
+    // SPARKING: What chance (out of 255) is there that a new spark will be lit?
+    // Higher chance = more roaring fire.  Lower chance = more flickery fire.
+    // Default 120, suggested range 50-200.
+    if(p < 0.01)
+    {
+        p = 0.01;
+    }
+    float fPreSparking = 150.0 * p;
+    int sparking = 50 + (int) fPreSparking;
+
+    int framesPerSecond = 60;
+    FastLED.setBrightness(lDefaultValueG);
+    Fire2012(sparking); // run simulation frame
+    FastLED.show(); // display this frame
+    FastLED.delay(1000 / framesPerSecond);
 }
 
 void mode8(float p)
@@ -640,3 +790,4 @@ void modeFail(int m)
     Serial.print("invalid mode passed in: ");
     Serial.println(m);
 }
+
