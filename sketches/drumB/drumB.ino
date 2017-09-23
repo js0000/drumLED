@@ -32,11 +32,17 @@
 #define BUTTON_PIN 4
 #define MIC_PIN 2
 #define POT_PIN A0
-#define DISPLAY_CONTROL_PIN 0
 #define DISPLAY_POINT_PIN 9
 #define DISPLAY_START_PIN 6
 #define LED_PIN 3
-#define LED_NUM 30
+
+// "rainbow" modes will not work if this is > 255
+#define LED_NUM 64
+
+// between 0-255
+// 'value' == brightness
+#define DEFAULT_VALUE 128
+#define DEFAULT_SATURATION 255
 
 
 // =======
@@ -71,7 +77,6 @@ int pMaxPotLevelG = 672;
 
 // display
 // ------
-const int dControlPinG = DISPLAY_CONTROL_PIN;
 const int dPointPinG = DISPLAY_POINT_PIN;
 const int dStartPinG = DISPLAY_START_PIN;
 const int dDigitArraySizeG = 7;
@@ -109,8 +114,9 @@ const int dDigitMatrixG[16][dDigitArraySizeG] = {
 // ---
 const int lPinG = LED_PIN;
 const int lNumG = LED_NUM;
-const float fColorStepG = 255.0 / (float) lNumG;
-const uint8_t colorStepG = (int) fColorStepG;
+uint8_t hueStepG;
+const int lDefaultValueG = DEFAULT_VALUE;
+const int lDefaultSaturationG = DEFAULT_SATURATION;
 
 // fastLED data structure
 CRGB ledsG[lNumG];
@@ -120,7 +126,7 @@ CRGB ledsG[lNumG];
 bool alwaysUpdateG = false;
 int previousModeG = 0;
 float previousPotG;
-int previousMillisG = 0;
+int targetMillisG = 0;
 uint8_t previousHueG = 0;
 
 // =======
@@ -132,7 +138,6 @@ void setup()
     pinMode(bPinG, INPUT);
     pinMode(mPinG, INPUT);
     pinMode(pPinG, INPUT);
-    pinMode(dControlPinG, OUTPUT);
 
     // <= i instead of < i
     // due to inclusion of point pin
@@ -144,12 +149,7 @@ void setup()
     }
 
     FastLED.addLeds<NEOPIXEL, lPinG>(ledsG, lNumG);
-
-    // initialize
-    setDisplayPoint(0);
-    displayMode(0);
-    previousPotG = potentiometerScaledValue();
-    mode0(previousPotG);
+    setupInit();
 
     // FIXME: remove this before prod
     Serial.begin(9600);
@@ -159,23 +159,21 @@ void loop()
 {
     int mode = buttonGetValue();
     float pot = potentiometerScaledValue();
+
     boolean updateMode = false;
     if(mode != previousModeG)
     {
-       updateMode = true;
+        updateMode = true;
     }
     else if(pot != previousPotG)
     {
         updateMode = true;
-
-        // DEBUG
-        Serial.print("pot: ");
-        Serial.println(pot);
     }
     else if(alwaysUpdateG)
     {
         updateMode = true;
     }
+
     if(updateMode)
     {
         previousModeG = mode;
@@ -242,7 +240,7 @@ void loop()
 
     // FIXME: remove before prod
     // avoids data firehose effect
-    delay(1000);
+   //delay(1000);
 }
 
 
@@ -369,17 +367,48 @@ void displayMode(int mode)
     }
 }
 
-// 1 on, 0 off
-void setDisplayPoint(int display)
+void setDisplayPoint(bool display)
 {
-    int state = 1;
-    if(display == 1)
+    int state = 0;
+    if(!display)
     {
-        state = 0;
+        state = 1;
     }
     digitalWrite(dPointPinG, state);
 }
 
+
+// ==============
+// MODE FUNCTIONS
+// ==============
+
+// runs at setup()
+void setupInit()
+{
+    // set hueStepG
+    float fHueStepG = 255.0 / (float) lNumG;
+    if(fHueStepG < 1.0)
+    {
+        fHueStepG = 1.0;
+    }
+    hueStepG = (int) fHueStepG;
+
+    // set previousPotG
+    previousPotG = potentiometerScaledValue();
+    
+    // start mode0
+    displayMode(0);
+    mode0(previousPotG);
+}
+
+void dark()
+{
+    for(int i = 0; i < lNumG; i++)
+    {
+        ledsG[i] = CHSV(0, 0, 0);
+    }
+    FastLED.show();
+}
 
 // ======
 // MODES
@@ -388,88 +417,105 @@ void setDisplayPoint(int display)
 // hue changes with pot
 void mode0(float p)
 {
+    // DEBUG
+    Serial.println("mode0 called");
+
+    setDisplayPoint(false);
     alwaysUpdateG = false;
 
-    // brightness at half
-    uint8_t value = 127;
-    uint8_t saturation = 255;
     float fHue = 255.0 * p;
     uint8_t hue = (int) fHue;
     for(int i = 0; i < lNumG; i++)
     {
-        ledsG[i] = CHSV(hue, saturation, value);
+        ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
     }
     FastLED.show();
 }
 
 // red, brightness changes with pot
+// hue 0 == red
 void mode1(float p)
 {
+    // DEBUG
+    Serial.println("mode1 called");
+
+    setDisplayPoint(false);
     alwaysUpdateG = false;
 
     float fValue = 255.0 * p;
     uint8_t value = (int) fValue;
-    uint8_t saturation = 255;
-    uint8_t hue = 0;
     for(int i = 0; i < lNumG; i++)
     {
-        ledsG[i] = CHSV(hue, saturation, value);
+        ledsG[i] = CHSV(0, lDefaultSaturationG, value);
     }
     FastLED.show();
 }
 
 // green, brightness changes with pot
+// HSV green == 120 / 360 scaled to 85 / 255
 void mode2(float p)
 {
+    // DEBUG
+    Serial.println("mode2 called");
+
+    setDisplayPoint(false);
     alwaysUpdateG = false;
 
     float fValue = 255.0 * p;
     uint8_t value = (int) fValue;
-    uint8_t saturation = 255;
-    // 120 / 360 scaled to 85 / 255
-    uint8_t hue = 85;
     for(int i = 0; i < lNumG; i++)
     {
-        ledsG[i] = CHSV(hue, saturation, value);
+        ledsG[i] = CHSV(85, lDefaultSaturationG, value);
     }
     FastLED.show();
 }
 
 // blue, brightness changes with pot
+// HSV blue == 240 / 360 scaled to 170 / 255
 void mode3(float p)
 {
+    // DEBUG
+    Serial.println("mode3 called");
+
+    setDisplayPoint(false);
     alwaysUpdateG = false;
 
     float fValue = 255.0 * p;
     uint8_t value = (int) fValue;
-    uint8_t saturation = 255;
-    // 240 / 360 scaled to 170 / 255
-    uint8_t hue = 170;
     for(int i = 0; i < lNumG; i++)
     {
-        ledsG[i] = CHSV(hue, saturation, value);
+        ledsG[i] = CHSV(170, lDefaultSaturationG, value);
     }
     FastLED.show();
 }
 
-// rainbow, pot controls rotation
+// rainbow loop
+// pot controls rotation speed
 void mode4(float p)
 {
+    // DEBUG
+    Serial.println("mode4 called");
+
+    setDisplayPoint(false);
     alwaysUpdateG = true;
+
     int currentMillis = millis();
-    float fDelayMillis = 1000.0 * p;
-    int delayMillis = (int) fDelayMillis;
-    int offsetMillis = currentMillis - previousMillisG;
-    if(offsetMillis > delayMillis)
-    {
-        uint8_t value = 127;
-        uint8_t saturation = 255;
+    if(currentMillis > targetMillisG){
+
+        // recompute delay between refreshes
+        // max delay hardwired to 1000 (1 second)
+        if(p < 0.01)
+        {
+            p = 0.01;
+        }
+        float fDelayMillis = 1000.0 * p;
+        targetMillisG = currentMillis + (int) fDelayMillis;
         uint8_t hue = previousHueG;
         for(int i = 0; i < lNumG; i++)
         {
-            uint8_t tempHue = hue + colorStepG;
+            uint8_t tempHue = hue + hueStepG;
             hue = tempHue % 255;
-            ledsG[i] = CHSV(hue, saturation, value);
+            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
             if(i == 0)
             {
                  previousHueG = hue;
@@ -477,62 +523,116 @@ void mode4(float p)
         }
         FastLED.show();
     }
-    previousMillisG = currentMillis;
 }
 
 void mode5(float p)
 {
+    // DEBUG
     Serial.println("mode5 called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void mode6(float p)
 {
+    // DEBUG
     Serial.println("mode6 called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void mode7(float p)
 {
+    // DEBUG
     Serial.println("mode7 called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void mode8(float p)
 {
+    // DEBUG
     Serial.println("mode8 called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void mode9(float p)
 {
+    // DEBUG
     Serial.println("mode9 called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void modeA(float p)
 {
+    // DEBUG
     Serial.println("modeA called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void modeB(float p)
 {
+    // DEBUG
     Serial.println("modeB called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void modeC(float p)
 {
+    // DEBUG
     Serial.println("modeC called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void modeD(float p)
 {
+    // DEBUG
     Serial.println("modeD called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void modeE(float p)
 {
+    // DEBUG
     Serial.println("modeE called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void modeF(float p)
 {
+    // DEBUG
     Serial.println("modeF called");
+
+    setDisplayPoint(false);
+    alwaysUpdateG = false;
+    dark();
 }
 
 void modeFail(int m)
