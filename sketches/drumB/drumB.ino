@@ -53,6 +53,8 @@
 // ------
 const int bPinG = BUTTON_PIN;
 bool bPressedG = false;
+
+// this is initial mode
 int bValueG = 0;
 
 // microphone
@@ -398,10 +400,6 @@ void setupInit()
 
     // set savedPotG
     savedPotG = potentiometerScaled();
-
-    // start mode
-    displayMode(0);
-    mode0(savedPotG);
 }
 
 void dark()
