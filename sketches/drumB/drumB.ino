@@ -30,16 +30,16 @@
 // =======
 
 #define BUTTON_PIN 4
-#define MIC_PIN 2
+#define MIC_PIN A3
 #define POT_PIN A0
 #define DISPLAY_POINT_PIN 9
 #define DISPLAY_START_PIN 6
 #define LED_PIN 3
 
-// "rainbow" modes will not work if this is > 255
+// mode4 will not work if this is > 255
 #define LED_NUM 64
 
-// between 0-255
+// both must be between 0-255
 // 'value' == brightness
 #define DEFAULT_VALUE 128
 #define DEFAULT_SATURATION 255
@@ -59,15 +59,13 @@ int bValueG = 0;
 // ----------
 const int mPinG = MIC_PIN;
 
-// Sample window width in mS (50 mS = 20Hz)
-const int mSampleWindowG = 200;
-
-// anything below this is considered silence
-const double mVoltFloorG = 0.05;
-
 // this is changeable (can increase)
 // allows for more coverage of color spectrum
-double mMaxVoltsG = 0.6;
+float mMaxVoltsG = 0.6;
+
+// to better fill out the color space
+int mMaxRawHueG = 192;
+int mMinRawHueG = 32;
 
 // potentiometer
 // -------------
@@ -80,42 +78,11 @@ int pMaxPotLevelG = 672;
 const int dPointPinG = DISPLAY_POINT_PIN;
 const int dStartPinG = DISPLAY_START_PIN;
 const int dDigitArraySizeG = 7;
-const int dDigitMatrixG[16][dDigitArraySizeG] = {
-    //0 1 2 3 4 5 6
-    { 1,1,1,1,1,1,0 },  // = 0
-    { 0,0,1,1,0,0,0 },  // = 1
-    { 1,1,0,1,1,0,1 },  // = 2
-    { 0,1,1,1,1,0,1 },  // = 3
-    { 0,0,1,1,0,1,1 },  // = 4
-    { 0,1,1,0,1,1,1 },  // = 5
-    { 1,1,1,0,1,1,1 },  // = 6
-    { 0,0,1,1,1,0,0 },  // = 7
-    { 1,1,1,1,1,1,1 },  // = 8
-    { 0,1,1,1,1,1,1 },  // = 9
-    { 1,0,1,1,1,1,1 },  // = A
-    { 1,1,1,0,0,1,1 },  // = b
-    { 1,1,0,0,0,0,1 },  // = c
-    { 1,1,1,1,0,0,1 },  // = d
-    { 1,1,0,0,1,1,1 },  // = E
-    { 1,0,0,0,1,1,1 }   // = F
-};
-
-/*
-    dDigitMatrixG bit map
-
-        4
-    5       3
-        6
-    0       2
-        1
-*/
 
 // led
 // ---
 const int lPinG = LED_PIN;
 const int lNumG = LED_NUM;
-const int lLastIndexG = lNumG - 1;
-uint8_t hueStepG;
 const int lDefaultValueG = DEFAULT_VALUE;
 const int lDefaultSaturationG = DEFAULT_SATURATION;
 
@@ -127,10 +94,12 @@ CRGB ledsG[lNumG];
 bool alwaysUpdateG = false;
 int savedModeG = 0;
 float savedPotG;
-int targetMillisG = 0;
+unsigned long targetMillisG = 0;
 uint8_t savedHueG = 0;
 int savedLedG = 0;
-bool modeInitG = false;
+int savedLastSampleMillisG;
+
+
 
 // =======
 // ARDUINO
@@ -161,15 +130,15 @@ void setup()
 void loop()
 {
     int mode = buttonGetValue();
-    float pot = potentiometerScaledValue();
+    float pot = potentiometerScaled();
 
     boolean updateMode = false;
     if(mode != savedModeG)
     {
         updateMode = true;
-        modeInitG = false;
 
         // a breath before switching modes
+        dark();
         delay(500);
     }
     else if(pot != savedPotG)
@@ -240,10 +209,6 @@ void loop()
                 modeFail(mode);
         }
     }
-
-    // FIXME: remove before prod
-    // avoids data firehose effect
-   //delay(1000);
 }
 
 
@@ -285,8 +250,11 @@ bool buttonWasPressed()
 // ----------
 // pretty much stolen from adafruit
 // https://learn.adafruit.com/adafruit-microphone-amplifier-breakout/measuring-sound-levels
-double readPeakToPeak()
+float readPeakToPeak()
 {
+    // Sample window width in mS (50 mS = 20Hz)
+    unsigned long sampleWindow = 50;
+
     unsigned long startMillis = millis();  // Start of sample window
     unsigned int peakToPeak = 0;   // peak-to-peak level
     unsigned int signalMax = 0;
@@ -294,7 +262,7 @@ double readPeakToPeak()
     unsigned int sample;
 
     // collect data for sampleWindow
-    while(millis() - startMillis < mSampleWindowG)
+    while(millis() - startMillis < sampleWindow)
     {
         sample = analogRead(mPinG);
         // toss out spurious readings
@@ -316,15 +284,15 @@ double readPeakToPeak()
     peakToPeak = signalMax - signalMin;
 
     // convert to volts
-    // double volts = (peakToPeak * 5.0) / 1024;
-    double volts = (peakToPeak * 3.3) / 1024;
+    // float volts = (peakToPeak * 5.0) / 1024;
+    float volts = (peakToPeak * 3.3) / 1024;
     return volts;
 }
 
 // potentiometer
 // -------------
 // scaled from 0 - 1
-float potentiometerScaledValue()
+float potentiometerScaled()
 {
     int potLevel = analogRead(pPinG);
     if(potLevel > pMaxPotLevelG)
@@ -332,6 +300,13 @@ float potentiometerScaledValue()
         pMaxPotLevelG = potLevel + 1;
     }
     float ratio = (float) potLevel / (float) pMaxPotLevelG;
+
+    // do not return 0
+    // multiplying by 0 will break things
+    if(ratio < 0.01)
+    {
+        ratio = 0.01;
+    }
     return ratio;
 }
 
@@ -340,6 +315,36 @@ float potentiometerScaledValue()
 // takes mode number and changes display to match
 void displayMode(int mode)
 {
+    /*
+        digitMatrix bit map
+
+            4
+        5       3
+            6
+        0       2
+            1
+    */
+
+    int digitMatrix[16][dDigitArraySizeG] = {
+        //0 1 2 3 4 5 6
+        { 1,1,1,1,1,1,0 },  // = 0
+        { 0,0,1,1,0,0,0 },  // = 1
+        { 1,1,0,1,1,0,1 },  // = 2
+        { 0,1,1,1,1,0,1 },  // = 3
+        { 0,0,1,1,0,1,1 },  // = 4
+        { 0,1,1,0,1,1,1 },  // = 5
+        { 1,1,1,0,1,1,1 },  // = 6
+        { 0,0,1,1,1,0,0 },  // = 7
+        { 1,1,1,1,1,1,1 },  // = 8
+        { 0,1,1,1,1,1,1 },  // = 9
+        { 1,0,1,1,1,1,1 },  // = A
+        { 1,1,1,0,0,1,1 },  // = b
+        { 1,1,0,0,0,0,1 },  // = c
+        { 1,1,1,1,0,0,1 },  // = d
+        { 1,1,0,0,1,1,1 },  // = E
+        { 1,0,0,0,1,1,1 }   // = F
+    };
+
     int currentPin;
     int currentIndex;
     int matrixElement;
@@ -360,7 +365,7 @@ void displayMode(int mode)
             currentIndex = i - 1;
         }
 
-        matrixElement = dDigitMatrixG[mode][currentIndex];
+        matrixElement = digitMatrix[mode][currentIndex];
         state = 0;
         if(matrixElement == 0 )
         {
@@ -388,21 +393,13 @@ void setDisplayPoint(bool display)
 // runs at setup()
 void setupInit()
 {
-    // set hueStepG
-    float fHueStepG = 255.0 / (float) lNumG;
-    if(fHueStepG < 1.0)
-    {
-        fHueStepG = 1.0;
-    }
-    hueStepG = (int) fHueStepG;
-
-    // set savedPotG
-    savedPotG = potentiometerScaledValue();
-
     // Add entropy to random number generator; we use a lot of it.
     random16_add_entropy(random());
 
-    // start mode0
+    // set savedPotG
+    savedPotG = potentiometerScaled();
+
+    // start mode
     displayMode(0);
     mode0(savedPotG);
 }
@@ -488,6 +485,86 @@ void Fire2012(int fs)
     }
 }
 
+
+// returns zero if below voltFloor
+int voltsToHue(float v) {
+
+    // anything below this is considered silence
+    float voltFloor = 0.05;
+
+    int computedHue = 0;
+    if(v > voltFloor)
+    {
+        // recalibrate mMaxVoltsG if necessary
+        if(v > mMaxVoltsG)
+        {
+            mMaxVoltsG = v + 0.01;
+        }
+
+        // recalibrate rawHues if necessary
+        if(computedHue > mMaxRawHueG)
+        {
+            mMaxRawHueG = (computedHue + 1);
+            if(mMaxRawHueG > 255)
+            {
+                mMaxRawHueG = 255;
+            }
+        }
+        else if(computedHue < mMinRawHueG)
+        {
+            mMinRawHueG = (computedHue - 1);
+            if(mMinRawHueG < 0)
+            {
+                mMinRawHueG = 0;
+            }
+        }
+        float hueRange = mMaxRawHueG - mMinRawHueG;
+        float numerator = v * hueRange;
+        float voltRange = mMaxVoltsG - voltFloor;
+        float ratio = numerator / voltRange;
+        computedHue = round(ratio);
+    }
+    return computedHue;
+}
+
+// prepares raw hue to be put on HSV color scheme
+// compares against previous value
+//   to determine which "side" of hue cirle
+//   to place value upon
+// offsets so yellow is max
+uint8_t prepareHue(int rh) {
+
+  // yellow
+  int hueOffset = 60;
+  boolean louder = true;
+  if(savedHueG > rh)
+  {
+      louder = false;
+  }
+
+  // make loudest 0
+  int invertedHue = mMaxRawHueG - rh;
+
+  // scale to 128
+  int scaledHue = invertedHue / 2;
+
+  // 0-127 louder, 128-255 quieter
+  if(!louder)
+  {
+    // on a circle, not a line
+    scaledHue = 256 - scaledHue;
+  }
+
+  // offset so loudest matches hueOffset
+  int preppedHue = scaledHue + hueOffset;
+
+  // go around the circle, if needed
+  uint8_t currentHue = preppedHue % 255;
+
+  return currentHue;
+}
+
+
 // ======
 // MODES
 // ======
@@ -502,7 +579,7 @@ void mode0(float p)
     alwaysUpdateG = false;
 
     float fHue = 255.0 * p;
-    uint8_t hue = (int) fHue;
+    uint8_t hue = round(fHue);
     for(int i = 0; i < lNumG; i++)
     {
         ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
@@ -521,7 +598,7 @@ void mode1(float p)
     alwaysUpdateG = false;
 
     float fValue = 255.0 * p;
-    uint8_t value = (int) fValue;
+    uint8_t value = round(fValue);
     for(int i = 0; i < lNumG; i++)
     {
         ledsG[i] = CHSV(0, lDefaultSaturationG, value);
@@ -540,7 +617,7 @@ void mode2(float p)
     alwaysUpdateG = false;
 
     float fValue = 255.0 * p;
-    uint8_t value = (int) fValue;
+    uint8_t value = round(fValue);
     for(int i = 0; i < lNumG; i++)
     {
         ledsG[i] = CHSV(85, lDefaultSaturationG, value);
@@ -559,7 +636,7 @@ void mode3(float p)
     alwaysUpdateG = false;
 
     float fValue = 255.0 * p;
-    uint8_t value = (int) fValue;
+    uint8_t value = round(fValue);
     for(int i = 0; i < lNumG; i++)
     {
         ledsG[i] = CHSV(170, lDefaultSaturationG, value);
@@ -577,21 +654,25 @@ void mode4(float p)
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
-    int currentMillis = millis();
-    if(currentMillis > targetMillisG){
+    // divide color space among given LEDs
+    // FIXME: this code will only work with LED_NUM < 255
+    float fHueStep = 255.0 / (float) lNumG;
+    if(fHueStep < 1.0)
+    {
+        fHueStep = 1.0;
+    }
+    uint8_t hueStep = round(fHueStep);
 
-        // multiplying by 0 is bad!
-        if(p < 0.01)
-        {
-            p = 0.01;
-        }
+    unsigned long currentMillis = millis();
+    if(currentMillis > targetMillisG){
         // max delay hardwired to 1000 (1 second)
         float fDelayMillis = 1000.0 * p;
-        targetMillisG = currentMillis + (int) fDelayMillis;
+        int tmp = round(fDelayMillis);
+        targetMillisG = currentMillis + tmp;
         uint8_t hue = savedHueG;
         for(int i = 0; i < lNumG; i++)
         {
-            int tmp = hue + hueStepG;
+            tmp = hue + hueStep;
             hue = tmp % 255;
             ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
             if(i == 0)
@@ -612,15 +693,12 @@ void mode5(float p)
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
-    int currentMillis = millis();
+    unsigned long currentMillis = millis();
     if(currentMillis > targetMillisG){
-        if(p < 0.01)
-        {
-            p = 0.01;
-        }
         float fDelayMillis = 1000.0 * p;
-        targetMillisG = currentMillis + (int) fDelayMillis;
-        int tmp = savedHueG + 1;
+        int tmp = round(fDelayMillis);
+        targetMillisG = currentMillis + tmp;
+        tmp = savedHueG + 1;
         uint8_t hue = tmp % 255;
         savedHueG = hue;
         for(int i = 0; i < lNumG; i++)
@@ -642,38 +720,30 @@ void mode6(float p)
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
-    if(!modeInitG)
-    {
-        dark();
-        modeInitG = true;
-    }
-
-    int currentMillis = millis();
+    int lastIndex = lNumG - 1;
+    unsigned long currentMillis = millis();
     if(currentMillis > targetMillisG)
     {
-        if(p < 0.01)
-        {
-            p = 0.01;
-        }
         float fDelayMillis = 1000.0 * p;
-        targetMillisG = currentMillis + (int) fDelayMillis;
+        int tmp = round(fDelayMillis);
+        targetMillisG = currentMillis + tmp;
 
         // cycle through colors a bit faster this way
-        int tmp = savedHueG + 8;
+        tmp = savedHueG + 8;
         uint8_t hue = tmp % 255;
         tmp = savedLedG + 1;
         int onLed = tmp % lNumG;
         int offLed = onLed - 1;
         if(onLed == 0)
         {
-            offLed = lLastIndexG;
+            offLed = lastIndex;
         }
         savedLedG = onLed;
         ledsG[onLed] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
         ledsG[offLed] = CHSV(hue, 0, 0);
         FastLED.show();
 
-        if(onLed == lLastIndexG)
+        if(onLed == lastIndex)
         {
             savedHueG = hue;
         }
@@ -691,12 +761,9 @@ void mode7(float p)
     // SPARKING: What chance (out of 255) is there that a new spark will be lit?
     // Higher chance = more roaring fire.  Lower chance = more flickery fire.
     // Default 120, suggested range 50-200.
-    if(p < 0.01)
-    {
-        p = 0.01;
-    }
     float fPreSparking = 150.0 * p;
-    int sparking = 50 + (int) fPreSparking;
+    int tmp = round(fPreSparking);
+    int sparking = 50 + tmp;
 
     int framesPerSecond = 60;
     FastLED.setBrightness(lDefaultValueG);
@@ -710,9 +777,46 @@ void mode8(float p)
     // DEBUG
     Serial.println("mode8 called");
 
-    setDisplayPoint(false);
-    alwaysUpdateG = false;
-    dark();
+    setDisplayPoint(true);
+    alwaysUpdateG = true;
+
+    // how long to wait when there is no sound before turning off LED
+    unsigned long maxMillisBeforeTurningOff = 4000;
+
+    uint8_t hue = savedHueG;
+
+    float rawVolts = readPeakToPeak();
+    float cookedVolts = rawVolts * p;
+    int rawHue = voltsToHue(cookedVolts);
+
+    if(rawHue != 0)
+    {
+        hue = prepareHue(rawHue);
+        savedLastSampleMillisG = millis();
+    }
+    else
+    {
+        // check timing
+        unsigned long currentMillis = millis();
+        unsigned long sinceLastSample = currentMillis - savedLastSampleMillisG;
+        if(sinceLastSample > maxMillisBeforeTurningOff)
+        {
+            dark();
+        }
+    }
+
+    // only update LEDS if there is a change
+    if(savedHueG != hue)
+    {
+        for(int i = 0; i < lNumG; i++)
+        {
+            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
+        }
+        FastLED.show();
+
+        // reset
+        savedHueG = hue;
+    }
 }
 
 void mode9(float p)
@@ -722,7 +826,6 @@ void mode9(float p)
 
     setDisplayPoint(false);
     alwaysUpdateG = false;
-    dark();
 }
 
 void modeA(float p)
@@ -732,7 +835,6 @@ void modeA(float p)
 
     setDisplayPoint(false);
     alwaysUpdateG = false;
-    dark();
 }
 
 void modeB(float p)
@@ -742,7 +844,6 @@ void modeB(float p)
 
     setDisplayPoint(false);
     alwaysUpdateG = false;
-    dark();
 }
 
 void modeC(float p)
@@ -752,7 +853,6 @@ void modeC(float p)
 
     setDisplayPoint(false);
     alwaysUpdateG = false;
-    dark();
 }
 
 void modeD(float p)
@@ -762,7 +862,6 @@ void modeD(float p)
 
     setDisplayPoint(false);
     alwaysUpdateG = false;
-    dark();
 }
 
 void modeE(float p)
@@ -772,7 +871,6 @@ void modeE(float p)
 
     setDisplayPoint(false);
     alwaysUpdateG = false;
-    dark();
 }
 
 void modeF(float p)
@@ -782,7 +880,6 @@ void modeF(float p)
 
     setDisplayPoint(false);
     alwaysUpdateG = false;
-    dark();
 }
 
 void modeFail(int m)
