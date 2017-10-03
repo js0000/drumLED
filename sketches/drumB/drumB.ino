@@ -255,7 +255,7 @@ bool buttonWasPressed()
 float readPeakToPeak()
 {
     // Sample window width in mS (50 mS = 20Hz)
-    unsigned long sampleWindow = 50;
+    unsigned long sampleWindow = 200;
 
     unsigned long startMillis = millis();  // Start of sample window
     unsigned int peakToPeak = 0;   // peak-to-peak level
