@@ -37,11 +37,11 @@
 #define LED_PIN 3
 
 // mode4 will not work if this is > 255
-#define LED_NUM 64
+#define LED_NUM 148
 
 // both must be between 0-255
 // 'value' == brightness
-#define DEFAULT_VALUE 128
+#define DEFAULT_VALUE 64
 #define DEFAULT_SATURATION 255
 
 
@@ -55,7 +55,7 @@ const int bPinG = BUTTON_PIN;
 bool bPressedG = false;
 
 // this is initial mode
-int bValueG = 0;
+int bModeG = 0;
 
 // microphone
 // ----------
@@ -225,11 +225,11 @@ int buttonGetValue()
     bool pressed = buttonWasPressed();
     if(pressed)
     {
-        int currentButtonValue = bValueG;
+        int currentButtonValue = bModeG;
         currentButtonValue += 1;
-        bValueG = currentButtonValue % 16;
+        bModeG = currentButtonValue % 16;
     }
-    return bValueG;
+    return bModeG;
 }
 
 bool buttonWasPressed()
