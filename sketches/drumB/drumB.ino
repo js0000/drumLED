@@ -718,6 +718,7 @@ void mode6(float p)
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
+    int colorCycleStep = 16;
     int lastIndex = lNumG - 1;
     unsigned long currentMillis = millis();
     if(currentMillis > targetMillisG)
@@ -727,7 +728,7 @@ void mode6(float p)
         targetMillisG = currentMillis + tmp;
 
         // cycle through colors a bit faster this way
-        tmp = savedHueG + 8;
+        tmp = savedHueG + colorCycleStep;
         uint8_t hue = tmp % 255;
         tmp = savedLedG + 1;
         int onLed = tmp % lNumG;
