@@ -1,5 +1,7 @@
+#include <SevenSegmentDisplay.h>
 
-#include <Prototype.h>
+
+//#include <Prototype.h>
 
 #include <Microphone.h>
 #include <Potentiometer.h>
@@ -58,7 +60,6 @@ long interestingColors[] = {COLOR_BROWN, COLOR_ORANGE, COLOR_SALMON};
 
 //define the input pins that are attached to each control
 #ifdef PROTOTYPE 
-#define PROTOBOARD_PIN 2
 #define SEGMENT_DISPLAY_START_PIN 7
 #define SEGMENT_DISPLAY_POINT_PIN 3
 #else
