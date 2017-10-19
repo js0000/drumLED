@@ -7,11 +7,11 @@ number, description, potentiometer parameter
 0x5, rainbow time, rotation speed
 0x6, rainbow LED, rotation speed
 0x7, fire, sparking
-0x8, hue changes with amplitude (all hues), microphone sensitivity
-0x9, hue steps with amplitude (6 hues), microphone sensitivity
+0x8, hue changes with amplitude (all), microphone sensitivity
+0x9, hue changes with amplitude (6), microphone sensitivity
 0xA, log of hue changes with amplitude (all hues: add 1 LED each change), microphone sensitivity
-0xB, log of hue steps amplitude (6 hues: add 1 each change), mic sensitivity
-0xC, change to random solid hue every N hits, change frequency
-0xD, change to random CSV values (within ranges) every N hits, change frequency
-0xE,,
+0xB, saturation changes with amplitude, hue
+0xC, VU meter, microphone sensitivity
+0xD, change to random solid hue every N hits, change frequency
+0xE, change to random CSV values (within ranges) every N hits, change frequency
 0xF, power gague, -

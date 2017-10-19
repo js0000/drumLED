@@ -44,6 +44,12 @@
 #define DEFAULT_VALUE 64
 #define DEFAULT_SATURATION 255
 
+// break between modes: in milliseconds
+#define MODE_CHANGE_DELAY 250
+
+// LEDs off if no input within limit: in milliseconds
+#define TIME_UNTIL_OFF 4000
+
 
 // =======
 // GLOBALS
@@ -96,11 +102,16 @@ CRGB ledsG[lNumG];
 bool alwaysUpdateG = false;
 int savedModeG = 0;
 float savedPotG;
-unsigned long targetMillisG = 0;
+unsigned long savedTargetMillisG = 0;
 uint8_t savedHueG = 0;
 int savedLedG = 0;
 int savedLastSampleMillisG;
+int savedParamsG[lNumG];
 
+// config
+// ------
+const int modeChangeDelayG = MODE_CHANGE_DELAY;
+const unsigned long timeUntilOffG = TIME_UNTIL_OFF;
 
 
 // =======
@@ -138,10 +149,7 @@ void loop()
     if(mode != savedModeG)
     {
         updateMode = true;
-
-        // a breath before switching modes
-        dark();
-        delay(500);
+        modeInit();
     }
     else if(pot != savedPotG)
     {
@@ -411,6 +419,24 @@ void dark()
     FastLED.show();
 }
 
+void modeInit()
+{
+    // initialize variables
+    savedHueG = 0;
+    savedLedG = 0;
+
+    // value > 256 means "blank"
+    for(int i = 0; i < lNumG; i++)
+    {
+        savedParamsG[i] = 512;
+    }
+
+    // a breath before switching modes
+    dark();
+    delay(modeChangeDelayG);
+}
+
+
 // stolen from https://github.com/FastLED/FastLED/blob/master/examples/Fire2012/Fire2012.ino
 
 // Fire2012 by Mark Kriegsman, July 2012
@@ -485,7 +511,8 @@ void Fire2012(int fs)
 
 
 // returns zero if below voltFloor
-int voltsToHue(float v) {
+int voltsToHue(float v)
+{
 
     // anything below this is considered silence
     float voltFloor = 0.05;
@@ -530,36 +557,59 @@ int voltsToHue(float v) {
 //   to determine which "side" of hue cirle
 //   to place value upon
 // offsets so yellow is max
-uint8_t prepareHue(int rh) {
+uint8_t prepareHue(int rh)
+{
+    // yellow
+    int hueOffset = 60;
+    boolean louder = true;
+    if(savedHueG > rh)
+    {
+        louder = false;
+    }
 
-  // yellow
-  int hueOffset = 60;
-  boolean louder = true;
-  if(savedHueG > rh)
-  {
-      louder = false;
-  }
+    // make loudest 0
+    int invertedHue = mMaxRawHueG - rh;
 
-  // make loudest 0
-  int invertedHue = mMaxRawHueG - rh;
+    // scale to 128
+    int scaledHue = invertedHue / 2;
 
-  // scale to 128
-  int scaledHue = invertedHue / 2;
+    // 0-127 louder, 128-255 quieter
+    if(!louder)
+    {
+        // on a circle, not a line
+        scaledHue = 256 - scaledHue;
+    }
 
-  // 0-127 louder, 128-255 quieter
-  if(!louder)
-  {
-    // on a circle, not a line
-    scaledHue = 256 - scaledHue;
-  }
+    // offset so loudest matches hueOffset
+    int preppedHue = scaledHue + hueOffset;
 
-  // offset so loudest matches hueOffset
-  int preppedHue = scaledHue + hueOffset;
+    // go around the circle, if needed
+    uint8_t currentHue = preppedHue % 255;
 
-  // go around the circle, if needed
-  uint8_t currentHue = preppedHue % 255;
+    return currentHue;
+}
 
-  return currentHue;
+// simplified rawHue to one of 6 discrete values
+// values are in units of 60 (360 / 6)
+uint8_t scaleHue(int rh)
+{
+    // make loudest 0
+    int invertedHue = mMaxRawHueG - rh;
+
+    // scale to 360 (circular) from 255
+    float numerator = invertedHue * 360.0;
+    float ratio = numerator / 255.0;
+
+    // scale to multiple of 60
+    float rawColorMultiplier = ratio / 60.0;
+    int colorMultiplier = round(rawColorMultiplier);
+    int rawScaled = colorMultiplier * 60;
+
+    // offset so magenta is zero
+    int offsetScaled = rawScaled + 60;
+    uint8_t currentScaled = offsetScaled % 360;
+
+    return currentScaled;
 }
 
 
@@ -662,11 +712,11 @@ void mode4(float p)
     uint8_t hueStep = round(fHueStep);
 
     unsigned long currentMillis = millis();
-    if(currentMillis > targetMillisG){
+    if(currentMillis > savedTargetMillisG){
         // max delay hardwired to 1000 (1 second)
         float fDelayMillis = 1000.0 * p;
         int tmp = round(fDelayMillis);
-        targetMillisG = currentMillis + tmp;
+        savedTargetMillisG = currentMillis + tmp;
         uint8_t hue = savedHueG;
         for(int i = 0; i < lNumG; i++)
         {
@@ -692,10 +742,10 @@ void mode5(float p)
     alwaysUpdateG = true;
 
     unsigned long currentMillis = millis();
-    if(currentMillis > targetMillisG){
+    if(currentMillis > savedTargetMillisG){
         float fDelayMillis = 1000.0 * p;
         int tmp = round(fDelayMillis);
-        targetMillisG = currentMillis + tmp;
+        savedTargetMillisG = currentMillis + tmp;
         tmp = savedHueG + 1;
         uint8_t hue = tmp % 255;
         savedHueG = hue;
@@ -721,11 +771,11 @@ void mode6(float p)
     int colorCycleStep = 16;
     int lastIndex = lNumG - 1;
     unsigned long currentMillis = millis();
-    if(currentMillis > targetMillisG)
+    if(currentMillis > savedTargetMillisG)
     {
         float fDelayMillis = 1000.0 * p;
         int tmp = round(fDelayMillis);
-        targetMillisG = currentMillis + tmp;
+        savedTargetMillisG = currentMillis + tmp;
 
         // cycle through colors a bit faster this way
         tmp = savedHueG + colorCycleStep;
@@ -779,9 +829,6 @@ void mode8(float p)
     setDisplayPoint(true);
     alwaysUpdateG = true;
 
-    // how long to wait when there is no sound before turning off LED
-    unsigned long maxMillisBeforeTurningOff = 4000;
-
     uint8_t hue = savedHueG;
 
     float rawVolts = readPeakToPeak();
@@ -798,7 +845,7 @@ void mode8(float p)
         // check timing
         unsigned long currentMillis = millis();
         unsigned long sinceLastSample = currentMillis - savedLastSampleMillisG;
-        if(sinceLastSample > maxMillisBeforeTurningOff)
+        if(sinceLastSample > timeUntilOffG)
         {
             dark();
         }
@@ -823,8 +870,43 @@ void mode9(float p)
     // DEBUG
     Serial.println("mode9 called");
 
-    setDisplayPoint(false);
-    alwaysUpdateG = false;
+    setDisplayPoint(true);
+    alwaysUpdateG = true;
+
+    uint8_t hue = savedHueG;
+
+    float rawVolts = readPeakToPeak();
+    float cookedVolts = rawVolts * p;
+    int rawHue = voltsToHue(cookedVolts);
+
+    if(rawHue != 0)
+    {
+        hue = scaleHue(rawHue);
+        savedLastSampleMillisG = millis();
+    }
+    else
+    {
+        // check timing
+        unsigned long currentMillis = millis();
+        unsigned long sinceLastSample = currentMillis - savedLastSampleMillisG;
+        if(sinceLastSample > timeUntilOffG)
+        {
+            dark();
+        }
+    }
+
+    // only update LEDS if there is a change
+    if(savedHueG != hue)
+    {
+        for(int i = 0; i < lNumG; i++)
+        {
+            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
+        }
+        FastLED.show();
+
+        // reset
+        savedHueG = hue;
+    }
 }
 
 void modeA(float p)
@@ -832,8 +914,65 @@ void modeA(float p)
     // DEBUG
     Serial.println("modeA called");
 
-    setDisplayPoint(false);
-    alwaysUpdateG = false;
+    setDisplayPoint(true);
+    alwaysUpdateG = true;
+
+    uint8_t hue = savedHueG;
+
+    float rawVolts = readPeakToPeak();
+    float cookedVolts = rawVolts * p;
+    int rawHue = voltsToHue(cookedVolts);
+
+    if(rawHue != 0)
+    {
+        hue = prepareHue(rawHue);
+        savedLastSampleMillisG = millis();
+    }
+    else
+    {
+        // check timing
+        unsigned long currentMillis = millis();
+        unsigned long sinceLastSample = currentMillis - savedLastSampleMillisG;
+        if(sinceLastSample > timeUntilOffG)
+        {
+            dark();
+        }
+    }
+
+    // only update LEDS if there is a change
+    if(savedHueG != hue)
+    {
+        int j;
+
+        // initialize display array
+        int displayParams[lNumG];
+        displayParams[0] = hue;
+        int indexLimit = lNumG - 1;
+        for(int i = 0; i < indexLimit; i++)
+        {
+            j = i + 1;
+            displayParams[j] = savedParamsG[i];
+        }
+
+        // use displayParams to populate LEDs, savedParamsG
+        for(int i = 0; i < indexLimit; i++)
+        {
+            if(displayParams[i] < 256)
+            {
+                ledsG[i] = CHSV(displayParams[i], lDefaultSaturationG, lDefaultValueG);
+            }
+            // larger values mean blanks
+            else
+            {
+                ledsG[i] = CHSV(0, 0, 0);
+            }
+            savedParamsG[i] = displayParams[i];
+        }
+        FastLED.show();
+
+        // reset
+        savedHueG = hue;
+    }
 }
 
 void modeB(float p)
@@ -843,6 +982,8 @@ void modeB(float p)
 
     setDisplayPoint(false);
     alwaysUpdateG = false;
+
+    // VU meter
 }
 
 void modeC(float p)
