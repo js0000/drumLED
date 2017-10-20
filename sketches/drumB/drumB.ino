@@ -45,7 +45,7 @@
 #define DEFAULT_SATURATION 255
 
 // break between modes: in milliseconds
-#define MODE_CHANGE_DELAY 250
+#define MODE_CHANGE_DELAY 256
 
 // LEDs off if no input within limit: in milliseconds
 #define TIME_UNTIL_OFF 4000
@@ -263,7 +263,7 @@ bool buttonWasPressed()
 float readPeakToPeak()
 {
     // Sample window width in mS (50 mS = 20Hz)
-    unsigned long sampleWindow = 200;
+    unsigned long sampleWindow = 100;
 
     unsigned long startMillis = millis();  // Start of sample window
     unsigned int peakToPeak = 0;   // peak-to-peak level
@@ -513,7 +513,6 @@ void Fire2012(int fs)
 // returns zero if below voltFloor
 int voltsToHue(float v)
 {
-
     // anything below this is considered silence
     float voltFloor = 0.05;
 
@@ -556,11 +555,8 @@ int voltsToHue(float v)
 // compares against previous value
 //   to determine which "side" of hue cirle
 //   to place value upon
-// offsets so yellow is max
-uint8_t prepareHue(int rh)
+uint8_t scaleHueAll(int rh)
 {
-    // yellow
-    int hueOffset = 60;
     boolean louder = true;
     if(savedHueG > rh)
     {
@@ -568,33 +564,28 @@ uint8_t prepareHue(int rh)
     }
 
     // make loudest 0
-    int invertedHue = mMaxRawHueG - rh;
+    // easier to scale
+    int invertedHue = 255 - rh;
 
     // scale to 128
-    int scaledHue = invertedHue / 2;
+    uint8_t computedHue = invertedHue / 2;
 
     // 0-127 louder, 128-255 quieter
     if(!louder)
     {
         // on a circle, not a line
-        scaledHue = 256 - scaledHue;
+        computedHue = 256 - computedHue;
     }
 
-    // offset so loudest matches hueOffset
-    int preppedHue = scaledHue + hueOffset;
-
-    // go around the circle, if needed
-    uint8_t currentHue = preppedHue % 255;
-
-    return currentHue;
+    return computedHue;
 }
 
 // simplified rawHue to one of 6 discrete values
 // values are in units of 60 (360 / 6)
-uint8_t scaleHue(int rh)
+uint8_t scaleHueSix(int rh)
 {
     // make loudest 0
-    int invertedHue = mMaxRawHueG - rh;
+    int invertedHue = 255 - rh;
 
     // scale to 360 (circular) from 255
     float numerator = invertedHue * 360.0;
@@ -603,13 +594,26 @@ uint8_t scaleHue(int rh)
     // scale to multiple of 60
     float rawColorMultiplier = ratio / 60.0;
     int colorMultiplier = round(rawColorMultiplier);
-    int rawScaled = colorMultiplier * 60;
+    uint8_t computedHue = colorMultiplier * 60;
 
-    // offset so magenta is zero
-    int offsetScaled = rawScaled + 60;
-    uint8_t currentScaled = offsetScaled % 360;
+/*
+    // DEBUG
+    // puts out csv of rh,colorMultiplier,computedHue
+    Serial.print(rh);
+    Serial.print(",");
+    Serial.print(colorMultiplier);
+    Serial.print(",");
+    Serial.println(computedHue);
+*/    
+    
+    return computedHue;
+}
 
-    return currentScaled;
+int offsetHue(int o, int h, int mH)
+{
+    int oh = o + h;
+    int r = oh % mH;
+    return r;
 }
 
 
@@ -811,8 +815,11 @@ void mode7(float p)
     // Higher chance = more roaring fire.  Lower chance = more flickery fire.
     // Default 120, suggested range 50-200.
     float fPreSparking = 150.0 * p;
-    int tmp = round(fPreSparking);
-    int sparking = 50 + tmp;
+    int temp = round(fPreSparking);
+
+    // flipped so control is more intuitive
+    int flippedTemp = 150 - temp;
+    int sparking = 50 + flippedTemp;
 
     int framesPerSecond = 60;
     FastLED.setBrightness(lDefaultValueG);
@@ -837,7 +844,9 @@ void mode8(float p)
 
     if(rawHue != 0)
     {
-        hue = prepareHue(rawHue);
+        int scaledHue = scaleHueAll(rawHue);
+        // 43/256 ~= 60/360
+        hue = offsetHue(43, scaledHue, 255);
         savedLastSampleMillisG = millis();
     }
     else
@@ -881,7 +890,9 @@ void mode9(float p)
 
     if(rawHue != 0)
     {
-        hue = scaleHue(rawHue);
+        int scaledHue = scaleHueSix(rawHue);
+        // 213/256 ~= 300/360
+        hue = offsetHue(213, scaledHue, 255);
         savedLastSampleMillisG = millis();
     }
     else
@@ -925,7 +936,9 @@ void modeA(float p)
 
     if(rawHue != 0)
     {
-        hue = prepareHue(rawHue);
+        int scaledHue = scaleHueAll(rawHue);
+        // 43/256 ~= 60/360
+        hue = offsetHue(43, scaledHue, 255);
         savedLastSampleMillisG = millis();
     }
     else
