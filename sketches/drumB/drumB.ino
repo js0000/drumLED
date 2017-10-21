@@ -47,8 +47,11 @@
 // break between modes: in milliseconds
 #define MODE_CHANGE_DELAY 256
 
-// LEDs off if no input within limit: in milliseconds
-#define TIME_UNTIL_OFF 4000
+// LEDs off if no input within limit
+#define MILLIS_UNTIL_OFF 4096
+
+// longest time between iterations of LED changes
+#define MAX_MILLIS_ITERATION 2048
 
 
 // =======
@@ -111,7 +114,15 @@ int savedParamsG[lNumG];
 // config
 // ------
 const int modeChangeDelayG = MODE_CHANGE_DELAY;
-const unsigned long timeUntilOffG = TIME_UNTIL_OFF;
+const unsigned long millisUntilOffG = MILLIS_UNTIL_OFF;
+const unsigned long maxMillisIterationG = MAX_MILLIS_ITERATION;
+
+// DEBUG
+const int maxDebugIndexG = 32;
+int currentDebugIndexG = 0;
+int aRawHueG[maxDebugIndexG];
+int aColorMultiplierG[maxDebugIndexG];
+int aComputedHueG[maxDebugIndexG];
 
 
 // =======
@@ -137,7 +148,7 @@ void setup()
     setupInit();
 
     // FIXME: remove this before prod
-    Serial.begin(9600);
+    Serial.begin(2400);
 }
 
 void loop()
@@ -431,6 +442,9 @@ void modeInit()
         savedParamsG[i] = 512;
     }
 
+    // DEBUG
+    currentDebugIndexG = 0;
+
     // a breath before switching modes
     dark();
     delay(modeChangeDelayG);
@@ -596,16 +610,19 @@ uint8_t scaleHueSix(int rh)
     int colorMultiplier = round(rawColorMultiplier);
     uint8_t computedHue = colorMultiplier * 60;
 
-/*
     // DEBUG
-    // puts out csv of rh,colorMultiplier,computedHue
-    Serial.print(rh);
-    Serial.print(",");
-    Serial.print(colorMultiplier);
-    Serial.print(",");
-    Serial.println(computedHue);
-*/    
-    
+    if(currentDebugIndexG < maxDebugIndexG)
+    {
+        aRawHueG[currentDebugIndexG] = rh;
+        aColorMultiplierG[currentDebugIndexG] = colorMultiplier;
+        aComputedHueG[currentDebugIndexG] = computedHue;
+        currentDebugIndexG += 1;
+    }
+    else
+    {
+        debugDump();
+    }
+
     return computedHue;
 }
 
@@ -614,6 +631,32 @@ int offsetHue(int o, int h, int mH)
     int oh = o + h;
     int r = oh % mH;
     return r;
+}
+
+unsigned long computeNextIteration(float p)
+{
+    float fRawDelay = maxMillisIterationG * p;
+    int rawDelay = round(fRawDelay);
+
+    // flip
+    unsigned long nextIteration = maxMillisIterationG - rawDelay;
+
+    return nextIteration;
+}
+
+void debugDump()
+{
+    Serial.println("rawHue,colorMultiplier,computedHue");
+    for(int i = 0; i < maxDebugIndexG; i++)
+    {
+        Serial.print(aRawHueG[i]);
+        Serial.print(",");
+        Serial.print(aColorMultiplierG[i]);
+        Serial.print(",");
+        Serial.println(aComputedHueG[i]);
+    }
+    Serial.println(" ");
+    currentDebugIndexG = 0;
 }
 
 
@@ -717,14 +760,12 @@ void mode4(float p)
 
     unsigned long currentMillis = millis();
     if(currentMillis > savedTargetMillisG){
-        // max delay hardwired to 1000 (1 second)
-        float fDelayMillis = 1000.0 * p;
-        int tmp = round(fDelayMillis);
-        savedTargetMillisG = currentMillis + tmp;
+        unsigned long delayMillis = computeNextIteration(p);
+        savedTargetMillisG = currentMillis + delayMillis;
         uint8_t hue = savedHueG;
         for(int i = 0; i < lNumG; i++)
         {
-            tmp = hue + hueStep;
+            int tmp = hue + hueStep;
             hue = tmp % 255;
             ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
             if(i == 0)
@@ -747,10 +788,9 @@ void mode5(float p)
 
     unsigned long currentMillis = millis();
     if(currentMillis > savedTargetMillisG){
-        float fDelayMillis = 1000.0 * p;
-        int tmp = round(fDelayMillis);
-        savedTargetMillisG = currentMillis + tmp;
-        tmp = savedHueG + 1;
+        unsigned long delayMillis = computeNextIteration(p);
+        savedTargetMillisG = currentMillis + delayMillis;
+        int tmp = savedHueG + 1;
         uint8_t hue = tmp % 255;
         savedHueG = hue;
         for(int i = 0; i < lNumG; i++)
@@ -772,17 +812,17 @@ void mode6(float p)
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
-    int colorCycleStep = 16;
+    // how quickly to cover the color space
+    int colorCycleStep = 32;
     int lastIndex = lNumG - 1;
     unsigned long currentMillis = millis();
     if(currentMillis > savedTargetMillisG)
     {
-        float fDelayMillis = 1000.0 * p;
-        int tmp = round(fDelayMillis);
-        savedTargetMillisG = currentMillis + tmp;
+        unsigned long delayMillis = computeNextIteration(p);
+        savedTargetMillisG = currentMillis + delayMillis;
 
         // cycle through colors a bit faster this way
-        tmp = savedHueG + colorCycleStep;
+        int tmp = savedHueG + colorCycleStep;
         uint8_t hue = tmp % 255;
         tmp = savedLedG + 1;
         int onLed = tmp % lNumG;
@@ -814,12 +854,9 @@ void mode7(float p)
     // SPARKING: What chance (out of 255) is there that a new spark will be lit?
     // Higher chance = more roaring fire.  Lower chance = more flickery fire.
     // Default 120, suggested range 50-200.
-    float fPreSparking = 150.0 * p;
-    int temp = round(fPreSparking);
-
-    // flipped so control is more intuitive
-    int flippedTemp = 150 - temp;
-    int sparking = 50 + flippedTemp;
+    float fsparking = 150.0 * p;
+    int temp = round(fsparking);
+    int sparking = 50 + temp;
 
     int framesPerSecond = 60;
     FastLED.setBrightness(lDefaultValueG);
@@ -853,8 +890,8 @@ void mode8(float p)
     {
         // check timing
         unsigned long currentMillis = millis();
-        unsigned long sinceLastSample = currentMillis - savedLastSampleMillisG;
-        if(sinceLastSample > timeUntilOffG)
+        unsigned long millisSinceLastSample = currentMillis - savedLastSampleMillisG;
+        if(millisSinceLastSample > millisUntilOffG)
         {
             dark();
         }
@@ -877,7 +914,7 @@ void mode8(float p)
 void mode9(float p)
 {
     // DEBUG
-    Serial.println("mode9 called");
+    //Serial.println("mode9 called");
 
     setDisplayPoint(true);
     alwaysUpdateG = true;
@@ -899,8 +936,8 @@ void mode9(float p)
     {
         // check timing
         unsigned long currentMillis = millis();
-        unsigned long sinceLastSample = currentMillis - savedLastSampleMillisG;
-        if(sinceLastSample > timeUntilOffG)
+        unsigned long millisSinceLastSample = currentMillis - savedLastSampleMillisG;
+        if(millisSinceLastSample > millisUntilOffG)
         {
             dark();
         }
@@ -945,8 +982,8 @@ void modeA(float p)
     {
         // check timing
         unsigned long currentMillis = millis();
-        unsigned long sinceLastSample = currentMillis - savedLastSampleMillisG;
-        if(sinceLastSample > timeUntilOffG)
+        unsigned long millisSinceLastSample = currentMillis - savedLastSampleMillisG;
+        if(millisSinceLastSample > millisUntilOffG)
         {
             dark();
         }
