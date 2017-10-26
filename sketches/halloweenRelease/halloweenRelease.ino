@@ -11,7 +11,8 @@
     there will be changes.
 
     Only 8 modes
-    no intermediate values for #defines
+    use #defines instead of globals where applicable
+    use uint8_t where applicable
 
 
     inputs
@@ -53,7 +54,7 @@
 #define MILLIS_UNTIL_OFF 4096
 
 // longest time between iterations of LED changes
-#define MAX_MILLIS_ITERATION 2048
+#define MAX_MILLIS_ITERATION 1024
 
 
 // =======
@@ -66,7 +67,7 @@
 bool bPressedG = false;
 
 // this is initial mode
-int bModeG = 0;
+uint8_t bModeG = 0;
 
 // microphone
 // ----------
@@ -77,8 +78,8 @@ int bModeG = 0;
 float mMaxVoltsG = 0.6;
 
 // to better fill out the color space
-int mMaxRawHueG = 192;
-int mMinRawHueG = 32;
+uint8_t mMaxRawHueG = 192;
+uint8_t mMinRawHueG = 32;
 
 // potentiometer
 // -------------
@@ -95,29 +96,32 @@ const uint8_t dDigitArraySizeG = 7;
 // led
 // ---
 // const uint8_t lPinG = LED_PIN;
-// const uint8_t lNumG = LED_NUM;
-// const uint8_t lDefaultValueG = DEFAULT_VALUE;
-// const uint8_t lDefaultSaturationG = DEFAULT_SATURATION;
+// making lNumG uint8_t means there will not be values > 256
+const uint8_t lNumG = LED_NUM;
+const uint8_t lDefaultValueG = DEFAULT_VALUE;
+const uint8_t lDefaultSaturationG = DEFAULT_SATURATION;
 
 // fastLED data structure
-CRGB ledsG[LED_NUM];
+CRGB ledsG[lNumG];
 
 // history
 // -------
 bool alwaysUpdateG = false;
-int savedModeG = 0;
+uint8_t savedModeG = 0;
+
+// saved on scale from 0 to 1
 float savedPotG;
 unsigned long savedTargetMillisG = 0;
 uint8_t savedHueG = 0;
-int savedLedG = 0;
-int savedLastSampleMillisG;
-int savedParamsG[LED_NUM];
+uint8_t savedLedG = 0;
+unsigned long savedLastSampleMillisG;
+uint8_t savedParamsG[lNumG];
 
 // config
 // ------
-// const uint8_t modeChangeDelayG = MODE_CHANGE_DELAY;
-// const unsigned long millisUntilOffG = MILLIS_UNTIL_OFF;
-// const unsigned long maxMillisIterationG = MAX_MILLIS_ITERATION;
+const int modeChangeDelayG = MODE_CHANGE_DELAY;
+const unsigned long millisUntilOffG = MILLIS_UNTIL_OFF;
+const unsigned long maxMillisIterationG = MAX_MILLIS_ITERATION;
 
 
 // =======
@@ -139,7 +143,7 @@ void setup()
         pinMode(displayPin, OUTPUT);
     }
 
-    FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, LED_NUM);
+    FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, lNumG);
     setupInit();
 
     // FIXME: remove this before prod
@@ -286,7 +290,7 @@ float readPeakToPeak()
 // scaled from 0 - 1
 float potentiometerScaled()
 {
-    uint8_t potLevel = analogRead(POT_PIN);
+    int potLevel = analogRead(POT_PIN);
     if(potLevel > pMaxPotLevelG)
     {
         pMaxPotLevelG = potLevel + 1;
@@ -394,7 +398,7 @@ void setupInit()
 
 void dark()
 {
-    for(uint8_t i = 0; i < LED_NUM; i++)
+    for(uint8_t i = 0; i < lNumG; i++)
     {
         ledsG[i] = CHSV(0, 0, 0);
     }
@@ -407,15 +411,14 @@ void modeInit()
     savedHueG = 0;
     savedLedG = 0;
 
-    // value > 256 means "blank"
-    for(uint8_t i = 0; i < LED_NUM; i++)
+    for(uint8_t i = 0; i < lNumG; i++)
     {
-        savedParamsG[i] = 512;
+        savedParamsG[i] = 0;
     }
 
     // a breath before switching modes
     dark();
-    delay(MODE_CHANGE_DELAY);
+    delay(modeChangeDelayG);
 }
 
 
@@ -459,16 +462,16 @@ void Fire2012(uint8_t fs)
     uint8_t fireSparking = fs;
 
     // Array of temperature readings at each simulation cell
-    static byte heat[LED_NUM];
+    static byte heat[lNumG];
     bool gReverseDirection = false;
 
     // Step 1.  Cool down every cell a little
-    for( uint8_t i = 0; i < LED_NUM; i++) {
-      heat[i] = qsub8( heat[i],  random8(0, ((fireCooling * 10) / LED_NUM) + 2));
+    for( uint8_t i = 0; i < lNumG; i++) {
+      heat[i] = qsub8( heat[i],  random8(0, ((fireCooling * 10) / lNumG) + 2));
     }
 
     // Step 2.  Heat from each cell drifts 'up' and diffuses a little
-    for( uint8_t k= LED_NUM - 1; k >= 2; k--) {
+    for( uint8_t k= lNumG - 1; k >= 2; k--) {
       heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
     }
 
@@ -479,11 +482,11 @@ void Fire2012(uint8_t fs)
     }
 
     // Step 4.  Map from heat cells to LED colors
-    for( uint8_t j = 0; j < LED_NUM; j++) {
+    for( uint8_t j = 0; j < lNumG; j++) {
       CRGB color = HeatColor( heat[j]);
       uint8_t pixelnumber;
       if( gReverseDirection ) {
-        pixelnumber = (LED_NUM - 1) - j;
+        pixelnumber = (lNumG - 1) - j;
       } else {
         pixelnumber = j;
       }
@@ -572,11 +575,11 @@ int offsetHue(uint8_t offset, uint8_t hue, uint8_t maxHue)
 
 unsigned long computeNextIteration(float p)
 {
-    float fRawDelay = MAX_MILLIS_ITERATION * p;
+    float fRawDelay = maxMillisIterationG * p;
     int rawDelay = round(fRawDelay);
 
     // flip
-    unsigned long nextIteration = MAX_MILLIS_ITERATION - rawDelay;
+    unsigned long nextIteration = maxMillisIterationG - rawDelay;
 
     return nextIteration;
 }
@@ -597,10 +600,9 @@ void mode0(float p)
 
     float fHue = 255.0 * p;
     uint8_t hue = round(fHue);
-    uint8_t ledNum = LED_NUM;
-    for(uint8_t i = 0; i < ledNum; i++)
+    for(uint8_t i = 0; i < lNumG; i++)
     {
-        ledsG[i] = CHSV(hue, DEFAULT_SATURATION, DEFAULT_VALUE);
+        ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
     }
     FastLED.show();
 }
@@ -617,9 +619,9 @@ void mode1(float p)
     alwaysUpdateG = true;
 
     // divide color space among given LEDs
-    // FIXME: this code will only work with LED_NUM < 255
-    uint8_t ledNum = LED_NUM;
-    float fHueStep = 255.0 / (float) ledNum;
+    // FIXME: this code will only work with lNumG < 255
+    //        since lNumG is uint8_t this is not a realistic worry ...
+    float fHueStep = 255.0 / (float) lNumG;
     if(fHueStep < 1.0)
     {
         fHueStep = 1.0;
@@ -631,11 +633,11 @@ void mode1(float p)
         unsigned long delayMillis = computeNextIteration(p);
         savedTargetMillisG = currentMillis + delayMillis;
         uint8_t hue = savedHueG;
-        for(uint8_t i = 0; i < ledNum; i++)
+        for(uint8_t i = 0; i < lNumG; i++)
         {
             uint8_t tmp = hue + hueStep;
             hue = tmp % 255;
-            ledsG[i] = CHSV(hue, DEFAULT_SATURATION, DEFAULT_VALUE);
+            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
             if(i == 0)
             {
                  savedHueG = hue;
@@ -655,16 +657,15 @@ void mode2(float p)
     alwaysUpdateG = true;
 
     unsigned long currentMillis = millis();
-    uint8_t ledNum = LED_NUM;
     if(currentMillis > savedTargetMillisG){
         unsigned long delayMillis = computeNextIteration(p);
         savedTargetMillisG = currentMillis + delayMillis;
         int tmp = savedHueG + 1;
         uint8_t hue = tmp % 255;
         savedHueG = hue;
-        for(uint8_t i = 0; i < ledNum; i++)
+        for(uint8_t i = 0; i < lNumG; i++)
         {
-            ledsG[i] = CHSV(hue, DEFAULT_SATURATION, DEFAULT_VALUE);
+            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
         }
         FastLED.show();
     }
@@ -682,9 +683,8 @@ void mode3(float p)
     alwaysUpdateG = true;
 
     // how quickly to cover the color space
-    uint8_t ledNum = LED_NUM;
     uint8_t colorCycleStep = 32;
-    uint8_t lastIndex = ledNum - 1;
+    uint8_t lastIndex = lNumG - 1;
     unsigned long currentMillis = millis();
     if(currentMillis > savedTargetMillisG)
     {
@@ -695,14 +695,14 @@ void mode3(float p)
         uint8_t tmp = savedHueG + colorCycleStep;
         uint8_t hue = tmp % 255;
         tmp = savedLedG + 1;
-        uint8_t onLed = tmp % ledNum;
+        uint8_t onLed = tmp % lNumG;
         uint8_t offLed = onLed - 1;
         if(onLed == 0)
         {
             offLed = lastIndex;
         }
         savedLedG = onLed;
-        ledsG[onLed] = CHSV(hue, DEFAULT_SATURATION, DEFAULT_VALUE);
+        ledsG[onLed] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
         ledsG[offLed] = CHSV(hue, 0, 0);
         FastLED.show();
 
@@ -730,7 +730,7 @@ void mode4(float p)
     uint8_t sparking = 50 + temp;
 
     uint8_t framesPerSecond = 60;
-    FastLED.setBrightness(DEFAULT_VALUE);
+    FastLED.setBrightness(lDefaultValueG);
     Fire2012(sparking); // run simulation frame
     FastLED.show(); // display this frame
     FastLED.delay(1000 / framesPerSecond);
@@ -763,7 +763,7 @@ void mode5(float p)
         // check timing
         unsigned long currentMillis = millis();
         unsigned long millisSinceLastSample = currentMillis - savedLastSampleMillisG;
-        if(millisSinceLastSample > MILLIS_UNTIL_OFF)
+        if(millisSinceLastSample > millisUntilOffG)
         {
             dark();
         }
@@ -772,9 +772,9 @@ void mode5(float p)
     // only update LEDS if there is a change
     if(savedHueG != hue)
     {
-        for(uint8_t i = 0; i < LED_NUM; i++)
+        for(uint8_t i = 0; i < lNumG; i++)
         {
-            ledsG[i] = CHSV(hue, DEFAULT_SATURATION, DEFAULT_VALUE);
+            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
         }
         FastLED.show();
 
@@ -798,7 +798,6 @@ void mode6(float p)
     float cookedVolts = rawVolts * p;
     uint8_t rawHue = voltsToHue(cookedVolts);
 
-    unsigned long millisUntilOff = MILLIS_UNTIL_OFF;
     if(rawHue != 0)
     {
         uint8_t scaledHue = scaleHueAll(rawHue);
@@ -811,22 +810,21 @@ void mode6(float p)
         // check timing
         unsigned long currentMillis = millis();
         unsigned long millisSinceLastSample = currentMillis - savedLastSampleMillisG;
-        if(millisSinceLastSample > millisUntilOff)
+        if(millisSinceLastSample > millisUntilOffG)
         {
             dark();
         }
     }
 
     // only update LEDS if there is a change
-    uint8_t ledNum = LED_NUM;
     if(savedHueG != hue)
     {
         uint8_t j;
 
         // initialize display array
-        uint8_t displayParams[ledNum];
+        uint8_t displayParams[lNumG];
         displayParams[0] = hue;
-        uint8_t indexLimit = ledNum - 1;
+        uint8_t indexLimit = lNumG - 1;
         for(uint8_t i = 0; i < indexLimit; i++)
         {
             j = i + 1;
@@ -836,9 +834,9 @@ void mode6(float p)
         // use displayParams to populate LEDs, savedParamsG
         for(uint8_t i = 0; i < indexLimit; i++)
         {
-            if(displayParams[i] < 256)
+            if(displayParams[i] > 0)
             {
-                ledsG[i] = CHSV(displayParams[i], DEFAULT_SATURATION, DEFAULT_VALUE);
+                ledsG[i] = CHSV(displayParams[i], lDefaultSaturationG, lDefaultValueG);
             }
             // larger values mean blanks
             else
