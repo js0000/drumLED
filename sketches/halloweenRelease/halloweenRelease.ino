@@ -39,8 +39,9 @@
 #define DISPLAY_START_PIN 6
 #define LED_PIN 3
 
-// mode4 will not work if this is > 255
+// must be < 256
 #define LED_NUM 148
+//#define LED_NUM 40
 
 // both must be between 0-255
 // 'value' == brightness
@@ -48,7 +49,7 @@
 #define DEFAULT_SATURATION 255
 
 // break between modes: in milliseconds
-#define MODE_CHANGE_DELAY 512
+#define MODE_CHANGE_DELAY 256
 
 // LEDs off if no input within limit
 #define MILLIS_UNTIL_OFF 4096
@@ -77,9 +78,13 @@ uint8_t bModeG = 0;
 // allows for more coverage of color spectrum
 float mMaxVoltsG = 0.6;
 
+// anything below this is considered silence
+const float mVoltFloorG = 0.05;
+
 // to better fill out the color space
-uint8_t mMaxRawHueG = 192;
-uint8_t mMinRawHueG = 32;
+// these may change during operation
+int mMaxRawHueG = 192;
+int mMinRawHueG = 32;
 
 // potentiometer
 // -------------
@@ -159,7 +164,7 @@ void loop()
     if(mode != savedModeG)
     {
         updateMode = true;
-        modeInit();
+        modeInit(mode);
     }
     else if(pot != savedPotG)
     {
@@ -405,15 +410,33 @@ void dark()
     FastLED.show();
 }
 
-void modeInit()
+void modeInit(uint8_t m)
 {
     // initialize variables
     savedHueG = 0;
     savedLedG = 0;
 
-    for(uint8_t i = 0; i < lNumG; i++)
+    if(m == 6)
     {
-        savedParamsG[i] = 0;
+        for(uint8_t i = 0; i < lNumG; i++)
+        {
+            savedParamsG[i] = 0;
+        }
+    }
+    else if(m == 7)
+    {
+        // 85 / 255 == 120 / 360
+        // 85 in 255 value hue value space
+        // is the same as 120 in 360 degree hue (color) wheel
+        float ratio = (float) 85 / (float) lNumG;
+        if(ratio < 1.0)
+        {
+            vuUnderSavedParams(ratio);
+        }
+        else
+        {
+            vuOverSavedParams(ratio);
+        }
     }
 
     // a breath before switching modes
@@ -495,14 +518,12 @@ void Fire2012(uint8_t fs)
 }
 
 
-// returns zero if below voltFloor
+// returns zero if below mVoltFloorG
 int voltsToHue(float v)
 {
-    // anything below this is considered silence
-    float voltFloor = 0.05;
 
-    uint8_t computedHue = 0;
-    if(v > voltFloor)
+    int computedHue = 0;
+    if(v > mVoltFloorG)
     {
         // recalibrate mMaxVoltsG if necessary
         if(v > mMaxVoltsG)
@@ -529,7 +550,7 @@ int voltsToHue(float v)
         }
         float hueRange = mMaxRawHueG - mMinRawHueG;
         float numerator = v * hueRange;
-        float voltRange = mMaxVoltsG - voltFloor;
+        float voltRange = mMaxVoltsG - mVoltFloorG;
         float ratio = numerator / voltRange;
         computedHue = round(ratio);
     }
@@ -584,6 +605,70 @@ unsigned long computeNextIteration(float p)
     return nextIteration;
 }
 
+// arg r is 85 / lNumG
+void vuUnderSavedParams(float r)
+{
+    float rawMultiplier = 1.0 / r;
+    int truncatedMultiplier = (int) rawMultiplier;
+    int truncatedTotal = 85 * truncatedMultiplier;
+    int remainder = lNumG - truncatedTotal;
+    uint8_t currentHue = 0;
+    uint8_t truncatedCount = 0;
+    bool remainderAdded = false;
+
+    // best for hues to start from red (0)
+    // and go toward green (85)
+    // so we populate array "backwards"
+    // since 0 is value at end
+    for(int i = lNumG - 1; i > -1; i--)
+    {
+        savedParamsG[i] = currentHue;
+        truncatedCount++;
+        if(truncatedCount >= truncatedMultiplier)
+        {
+            if(remainder > 0)
+            {
+                if(!remainderAdded)
+                {
+                    remainder -= 1;
+                    remainderAdded = true;
+                }
+                else
+                {
+                    currentHue += 1;
+                    truncatedCount = 0;
+                    remainderAdded = false;
+                }
+            }
+            else
+            {
+                currentHue += 1;
+                truncatedCount = 0;
+                remainderAdded = true;
+            }
+        }
+    }
+}
+
+// arg r is 85 / lNumG
+void vuOverSavedParams(float r)
+{
+    int hueAddend = (int) r;
+    int truncatedTotal = hueAddend * lNumG;
+    int remainder = 85 - truncatedTotal;
+    uint8_t currentHue = 0;
+    for(int i = lNumG - 1; i > -1; i--)
+    {
+        savedParamsG[i] = currentHue;
+        currentHue += hueAddend;
+        if(remainder > 0)
+        {
+            currentHue += 1;
+            remainder -= 1;
+        }
+    }
+}
+
 
 // ======
 // MODES
@@ -598,8 +683,9 @@ void mode0(float p)
     setDisplayPoint(false);
     alwaysUpdateG = false;
 
-    float fHue = 255.0 * p;
-    uint8_t hue = round(fHue);
+    float rawHue = 255.0 * p;
+    float flippedHue = 255.0 - rawHue;
+    uint8_t hue = round(flippedHue);
     for(uint8_t i = 0; i < lNumG; i++)
     {
         ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
@@ -749,7 +835,7 @@ void mode5(float p)
 
     float rawVolts = readPeakToPeak();
     float cookedVolts = rawVolts * p;
-    uint8_t rawHue = voltsToHue(cookedVolts);
+    int rawHue = voltsToHue(cookedVolts);
 
     if(rawHue != 0)
     {
@@ -858,9 +944,49 @@ void mode7(float p)
     // DEBUG
     Serial.println("mode7 called");
 
-    setDisplayPoint(false);
-    alwaysUpdateG = false;
+    setDisplayPoint(true);
+    alwaysUpdateG = true;
 
+    // savedParamsG populated by vuOverSavedParamsG() or vuUnderSavedParamsG()
+
+    float rawVolts = readPeakToPeak();
+    float cookedVolts = rawVolts * p;
+
+    if(cookedVolts <= mVoltFloorG)
+    {
+        // check timing
+        unsigned long currentMillis = millis();
+        unsigned long millisSinceLastSample = currentMillis - savedLastSampleMillisG;
+        if(millisSinceLastSample > millisUntilOffG)
+        {
+            dark();
+        }
+    }
+    else
+    {
+        // volts scaled to lNumG
+        float numerator = cookedVolts * (float) lNumG;
+        float rawSeparator = numerator / mMaxVoltsG;
+        int separatorIndex = round(rawSeparator);
+
+        // for timekeeping
+        savedLastSampleMillisG = millis();
+
+        // only LEDs below separatorIndex are lit
+        // others are dark
+        for(uint8_t i = 0; i < lNumG; i++)
+        {
+            if(i > separatorIndex)
+            {
+                ledsG[i] = CHSV(0, 0, 0);
+            }
+            else
+            {
+                ledsG[i] = CHSV(savedParamsG[i], lDefaultSaturationG, lDefaultValueG);
+            }
+        }
+        FastLED.show();
+    }
 }
 
 void modeFail(uint8_t m)
