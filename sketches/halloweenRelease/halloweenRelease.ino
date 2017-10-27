@@ -674,7 +674,8 @@ void vuOverSavedParams(float r)
 // MODES
 // ======
 
-// hue changes with pot
+// solid color
+// pot changes hue
 void mode0(float p)
 {
     // DEBUG
@@ -734,6 +735,7 @@ void mode1(float p)
 }
 
 // rainbow all LEDs via time
+// pot controls rate of hue change
 void mode2(float p)
 {
     // DEBUG
@@ -757,9 +759,10 @@ void mode2(float p)
     }
 }
 
-// rainbow LED
-// single LED travels from start to end of strip
-// then increments color
+// rainbow singleton LED
+//   single LED travels from start to end of strip
+//   incrementing color each time
+// pot controls speed
 void mode3(float p)
 {
     // DEBUG
@@ -800,6 +803,7 @@ void mode3(float p)
 }
 
 // fire
+// pot controls sparking
 void mode4(float p)
 {
     // DEBUG
@@ -811,9 +815,10 @@ void mode4(float p)
     // SPARKING: What chance (out of 255) is there that a new spark will be lit?
     // Higher chance = more roaring fire.  Lower chance = more flickery fire.
     // Default 120, suggested range 50-200.
-    float fsparking = 150.0 * p;
+    // lowering to 25
+    float fsparking = 175.0 * p;
     uint8_t temp = round(fsparking);
-    uint8_t sparking = 50 + temp;
+    uint8_t sparking = 25 + temp;
 
     uint8_t framesPerSecond = 60;
     FastLED.setBrightness(lDefaultValueG);
@@ -823,6 +828,7 @@ void mode4(float p)
 }
 
 // random-ish colors from mic volume
+// pot controls mic peak level
 void mode5(float p)
 {
     // DEBUG
@@ -869,7 +875,8 @@ void mode5(float p)
     }
 }
 
-
+// color/volume history pushed onto array
+// pot controls mic peak level
 void mode6(float p)
 {
     // DEBUG
@@ -905,31 +912,31 @@ void mode6(float p)
     // only update LEDS if there is a change
     if(savedHueG != hue)
     {
+        // update savedParamsG
+        // starting with 2nd from top
+        // leaving bottom for hue
         uint8_t j;
-
-        // initialize display array
-        uint8_t displayParams[lNumG];
-        displayParams[0] = hue;
-        uint8_t indexLimit = lNumG - 1;
-        for(uint8_t i = 0; i < indexLimit; i++)
+        // i is int not uint8_t because
+        //    negative number comparison needs to work
+        for(int i = lNumG - 2; i > -1; i--)
         {
             j = i + 1;
-            displayParams[j] = savedParamsG[i];
+            savedParamsG[j] = savedParamsG[i];
         }
+        savedParamsG[0] = hue;
 
-        // use displayParams to populate LEDs, savedParamsG
-        for(uint8_t i = 0; i < indexLimit; i++)
+        // display
+        for(uint8_t i = 0; i < lNumG; i++)
         {
-            if(displayParams[i] > 0)
+            if(savedParamsG[i] > 0)
             {
-                ledsG[i] = CHSV(displayParams[i], lDefaultSaturationG, lDefaultValueG);
+                ledsG[i] = CHSV(savedParamsG[i], lDefaultSaturationG, lDefaultValueG);
             }
-            // larger values mean blanks
+            // blanks
             else
             {
                 ledsG[i] = CHSV(0, 0, 0);
             }
-            savedParamsG[i] = displayParams[i];
         }
         FastLED.show();
 
@@ -939,6 +946,7 @@ void mode6(float p)
 }
 
 // VU meter
+// pot controls mic peak level
 void mode7(float p)
 {
     // DEBUG
