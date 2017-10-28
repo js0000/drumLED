@@ -149,7 +149,6 @@ void setup()
     }
 
     FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, lNumG);
-    setupInit();
 
     // FIXME: remove this before prod
     Serial.begin(9600);
@@ -391,16 +390,6 @@ void setDisplayPoint(bool display)
 // MODE FUNCTIONS
 // ==============
 
-// runs at setup()
-void setupInit()
-{
-    // Add entropy to random number generator; we use a lot of it.
-    random16_add_entropy(random());
-
-    // set savedPotG
-    savedPotG = potentiometerScaled();
-}
-
 void dark()
 {
     for(uint8_t i = 0; i < lNumG; i++)
@@ -415,14 +404,23 @@ void modeInit(uint8_t m)
     // initialize variables
     savedHueG = 0;
     savedLedG = 0;
+    savedPotG = potentiometerScaled();
 
-    if(m == 6)
+    // fire
+    if(m == 4)
+    {
+        // Add entropy to random number generator; we use a lot of it.
+        random16_add_entropy(random());
+    }
+    // color/volume history
+    else if(m == 6)
     {
         for(uint8_t i = 0; i < lNumG; i++)
         {
             savedParamsG[i] = 0;
         }
     }
+    // vu
     else if(m == 7)
     {
         // 85 / 255 == 120 / 360
@@ -761,7 +759,7 @@ void mode2(float p)
 
 // rainbow singleton LED
 //   single LED travels from start to end of strip
-//   incrementing color each time
+//   changing color for each LED
 // pot controls speed
 void mode3(float p)
 {
@@ -771,17 +769,13 @@ void mode3(float p)
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
-    // how quickly to cover the color space
-    uint8_t colorCycleStep = 32;
     uint8_t lastIndex = lNumG - 1;
     unsigned long currentMillis = millis();
     if(currentMillis > savedTargetMillisG)
     {
         unsigned long delayMillis = computeNextIteration(p);
         savedTargetMillisG = currentMillis + delayMillis;
-
-        // cycle through colors a bit faster this way
-        uint8_t tmp = savedHueG + colorCycleStep;
+        uint8_t tmp = savedHueG + 1;
         uint8_t hue = tmp % 255;
         tmp = savedLedG + 1;
         uint8_t onLed = tmp % lNumG;
@@ -791,14 +785,10 @@ void mode3(float p)
             offLed = lastIndex;
         }
         savedLedG = onLed;
+        savedHueG = hue;
         ledsG[onLed] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
         ledsG[offLed] = CHSV(hue, 0, 0);
         FastLED.show();
-
-        if(onLed == lastIndex)
-        {
-            savedHueG = hue;
-        }
     }
 }
 
