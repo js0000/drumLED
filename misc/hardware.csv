@@ -1,7 +1,7 @@
-name, pin, notes
-BUTTON_PIN, 4, also MODE_BUTTON_PIN
-MIC_PIN, A3, also MICROPHONE_PIN
-POT_PIN, A0, also BRIGHTNESS_POT_PIN or POT_1_PIN
-DISPLAY_POINT_PIN, 9, also SEGMENT_DISPLAY_POINT_PIN
-DISPLAY_START_PIN, 6, also SEGMENT_DISPLAY_START_PIN
-LED_PIN, 3, also LED_CONTROL_PIN
+define, pin, hardware
+BUTTON_PIN, 4, 
+MIC_PIN, A3, adafruit electrolet microphone amplifier https://www.adafruit.com/product/1063
+POT_PIN, A0,
+DISPLAY_POINT_PIN, 9,
+DISPLAY_START_PIN, 6,
+LED_PIN, 3, adafruit neopixel digital RGV LED strip https://www.adafruit.com/product/1461

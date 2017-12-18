@@ -1,17 +1,9 @@
-number, description, potentiometer parameter
-0x0, changeable color, hue
-0x1, red, brightness
-0x2, green, brightness
-0x3, blue, brightness
-0x4, rainbow strip, rotation speed
-0x5, rainbow time, rotation speed
-0x6, rainbow LED, rotation speed
-0x7, fire, sparking
-0x8, hue changes with amplitude (all), microphone sensitivity
-0x9, hue changes with amplitude (6), microphone sensitivity
-0xA, log of hue changes with amplitude (all hues: add 1 LED each change), microphone sensitivity
-0xB, saturation changes with amplitude, hue
-0xC, VU meter, microphone sensitivity
-0xD, change to random solid hue every N hits, change frequency
-0xE, change to random CSV values (within ranges) every N hits, change frequency
-0xF, power gague, -
+number, description, potentiometer changes
+0, changeable color, hue
+1, rainbow strip, rotation speed
+2, rainbow time, rotation speed
+3, rainbow LED, rotation speed
+4, fire, sparking level
+5, hue changes with amplitude (all), microphone sensitivity
+6, log of hue changes with amplitude (all hues: add 1 LED each change), microphone sensitivity
+7, VU meter, microphone sensitivity

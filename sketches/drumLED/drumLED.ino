@@ -1,19 +1,13 @@
 /*
 
-    halloweenRelease.ino
+    drumLED.ino
+    bkinky lights from the arduino
 
-    This sketch is to run on the arduino
-    at dunster road's halloween party 2017
+    version 1.0
 
-    There have been memory errors
-    which have stopped development
-    so to push out a release for next week
-    there will be changes.
+    8 modes
 
-    Only 8 modes
-    use #defines instead of globals where applicable
-    use uint8_t where applicable
-
+    see misc/modes.csv
 
     inputs
     - button
@@ -24,6 +18,7 @@
     - display
     - led
 
+    see misc/hardware.csv
 */
 
 #include "FastLED.h"
@@ -41,7 +36,6 @@
 
 // must be < 256
 #define LED_NUM 148
-//#define LED_NUM 40
 
 // both must be between 0-255
 // 'value' == brightness
@@ -64,7 +58,6 @@
 
 // button
 // ------
-// const uint8_t bPinG = BUTTON_PIN;
 bool bPressedG = false;
 
 // this is initial mode
@@ -72,8 +65,6 @@ uint8_t bModeG = 0;
 
 // microphone
 // ----------
-// const uint8_t mPinG = MIC_PIN;
-
 // this is changeable (can increase)
 // allows for more coverage of color spectrum
 float mMaxVoltsG = 0.6;
@@ -88,20 +79,14 @@ int mMinRawHueG = 32;
 
 // potentiometer
 // -------------
-// const uint8_t pPinG = POT_PIN;
-// pMaxPotLevelG will not be needed with standardized hardware
 int pMaxPotLevelG = 672;
 
 // display
 // ------
-// const uint8_t dPointPinG = DISPLAY_POINT_PIN;
-// const uint8_t dStartPinG = DISPLAY_START_PIN;
 const uint8_t dDigitArraySizeG = 7;
 
 // led
 // ---
-// const uint8_t lPinG = LED_PIN;
-// making lNumG uint8_t means there will not be values > 256
 const uint8_t lNumG = LED_NUM;
 const uint8_t lDefaultValueG = DEFAULT_VALUE;
 const uint8_t lDefaultSaturationG = DEFAULT_SATURATION;
@@ -149,9 +134,6 @@ void setup()
     }
 
     FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, lNumG);
-
-    // FIXME: remove this before prod
-    Serial.begin(9600);
 }
 
 void loop()
@@ -676,9 +658,6 @@ void vuOverSavedParams(float r)
 // pot changes hue
 void mode0(float p)
 {
-    // DEBUG
-    Serial.println("mode0 called");
-
     setDisplayPoint(false);
     alwaysUpdateG = false;
 
@@ -697,15 +676,12 @@ void mode0(float p)
 // pot controls rotation speed
 void mode1(float p)
 {
-    // DEBUG
-    Serial.println("mode1 called");
-
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
     // divide color space among given LEDs
-    // FIXME: this code will only work with lNumG < 255
-    //        since lNumG is uint8_t this is not a realistic worry ...
+    // this code will only work with lNumG < 255
+    // since lNumG is uint8_t this is not a realistic worry ...
     float fHueStep = 255.0 / (float) lNumG;
     if(fHueStep < 1.0)
     {
@@ -736,9 +712,6 @@ void mode1(float p)
 // pot controls rate of hue change
 void mode2(float p)
 {
-    // DEBUG
-    Serial.println("mode2 called");
-
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
@@ -763,9 +736,6 @@ void mode2(float p)
 // pot controls speed
 void mode3(float p)
 {
-    // DEBUG
-    Serial.println("mode3 called");
-
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
@@ -796,9 +766,6 @@ void mode3(float p)
 // pot controls sparking
 void mode4(float p)
 {
-    // DEBUG
-    Serial.println("mode4 called");
-
     setDisplayPoint(false);
     alwaysUpdateG = true;
 
@@ -821,9 +788,6 @@ void mode4(float p)
 // pot controls mic peak level
 void mode5(float p)
 {
-    // DEBUG
-    Serial.println("mode5 called");
-
     setDisplayPoint(true);
     alwaysUpdateG = true;
 
@@ -869,9 +833,6 @@ void mode5(float p)
 // pot controls mic peak level
 void mode6(float p)
 {
-    // DEBUG
-    Serial.println("mode6 called");
-
     setDisplayPoint(true);
     alwaysUpdateG = true;
 
@@ -939,9 +900,6 @@ void mode6(float p)
 // pot controls mic peak level
 void mode7(float p)
 {
-    // DEBUG
-    Serial.println("mode7 called");
-
     setDisplayPoint(true);
     alwaysUpdateG = true;
 
