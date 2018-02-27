@@ -18,10 +18,17 @@
     - display
     - led
 
-    see misc/hardware.csv
+   s see misc/hardware.csv
 */
 
+#define _VERSION_ "18.02.02"
+#include <avr/pgmspace.h>
 #include "FastLED.h"
+#include <Wire.h>
+#include <LCD.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for an unmodified backpack
 
 // =======
 // DEFINES
@@ -61,7 +68,7 @@
 bool bPressedG = false;
 
 // this is initial mode
-uint8_t bModeG = 0;
+int8_t bModeG = -1;
 
 // microphone
 // ----------
@@ -80,6 +87,7 @@ int mMinRawHueG = 32;
 // potentiometer
 // -------------
 int pMaxPotLevelG = 672;
+short lastPotLevelReading = 0;
 
 // display
 // ------
@@ -90,6 +98,16 @@ const uint8_t dDigitArraySizeG = 7;
 const uint8_t lNumG = LED_NUM;
 const uint8_t lDefaultValueG = DEFAULT_VALUE;
 const uint8_t lDefaultSaturationG = DEFAULT_SATURATION;
+//progress bar character for brightness
+byte pBar[8] = {
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+};
 
 // fastLED data structure
 CRGB ledsG[lNumG];
@@ -109,11 +127,17 @@ uint8_t savedParamsG[lNumG];
 
 // config
 // ------
-const int modeChangeDelayG = MODE_CHANGE_DELAY;
-const unsigned long millisUntilOffG = MILLIS_UNTIL_OFF;
-const unsigned long maxMillisIterationG = MAX_MILLIS_ITERATION;
 
 
+//LCD
+#define backlight_pin10 10
+static char modeName[17] = "";
+bool bListening = false;
+//LCD parameters
+#define LCD_ON_Brightness 128
+#define LCD_Dim_Brightness 1
+
+ 
 // =======
 // ARDUINO
 // =======
@@ -124,6 +148,9 @@ void setup()
     pinMode(MIC_PIN, INPUT);
     pinMode(POT_PIN, INPUT);
 
+    pinMode(backlight_pin10, OUTPUT);         // sets pin10 as output
+    analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100% 
+
     // <= i instead of < i
     // due to inclusion of point pin
     // which is not accounted for in dDigitArraySizeG
@@ -133,14 +160,204 @@ void setup()
         pinMode(displayPin, OUTPUT);
     }
 
+  // activate LCD module
+  lcd.begin (16,2); // for 16 x 2 LCD module
+  lcd.setBacklightPin(3,POSITIVE);
+  lcd.setBacklight(HIGH);
+  lcd.clear();
+  lcd.createChar(0, pBar);
+    
     FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, lNumG);
+
+    Serial.begin(9600);
+    
+    strcpy(modeName, "");
+
 }
 
-void loop()
-{
-    uint8_t mode = buttonGetValue();
-    float pot = potentiometerScaled();
+void setModeName(const char *string)
+{  
+   strcpy(modeName, string);
+}
 
+void printModeInfo(const char *string)
+{
+     strcpy(modeName, string);
+     printModeInfo(0);
+}
+
+void printModeInfo(int mode)
+{
+  static int lastMode=mode;
+
+  
+//  Serial.print(F("printModeInfo ")); Serial.print(mode);
+    
+  if (mode == -1)
+  {
+    lcd.clear();
+    lcd.print(F("drumLED "));
+    lcd.print(_VERSION_);
+    lcd.setCursor (0,1);        // go to start of 2nd line
+    lcd.print(F("Push button"));
+
+  }
+
+
+  if (lastMode != mode)
+  {
+   lcd.clear();
+   lcd.home (); // set cursor to 0,0
+   lcd.setCursor (0,0);        // go to start of 2nd line
+   if (!modeName[0])
+   {
+      lcd.print(F("Mode :"));  lcd.print(mode);
+   }
+   else
+   {
+      lcd.print(modeName);
+   }     
+   lcd.setCursor (0,1);        // go to start of 2nd line
+   if (bListening)
+     lcd.print(F("Mic on "));
+   else 
+     lcd.print(F("Mic off"));
+   lastMode = mode;
+  } 
+  
+}
+
+void showModeIsListening(bool listening)
+{
+ bListening = listening;
+}
+
+void LCD_BarGraph(short level)
+{
+  int i;
+  
+  //prints the progress bar
+  for (i=0; i<level; i++)
+  {
+    lcd.setCursor(i, 1);   
+    lcd.write(byte(0));  
+  }
+  for (i=level; i<16; i++)
+  {
+    lcd.setCursor(i, 1);   
+    lcd.write(" ");  
+  }
+
+
+}
+void loopBarGraph()
+{  //this is loop() function that just displays the bargraph controlled by the potentiometer on the lcd display
+   int level = 0;         // progress bar
+   int i;
+  // clears the LCD screen
+   lcd.setCursor(0, 0);   
+   lcd.write("This is a test");  
+      
+   level=map(potentiometerScaled()*1024, 0, 1024, 0, 17);
+   LCD_BarGraph(level);
+  
+  // delays 750 ms
+  delay(75);        
+
+
+}
+
+int dimDisplayIfControlsNotRecentlyTouched()
+{
+    
+    int mode = buttonGetValue();
+    float pot = potentiometerScaled();
+    
+      // variables used to keep track time since any control was touched.
+    static int lastMode = mode;
+    static float lastPot = pot;
+    static unsigned long  millisSinceLastUpate = millis();
+    static int lastSecond = 0;
+    static bool dimmed=false;
+    
+    int secondsPast=(millis()-millisSinceLastUpate)/1000;
+        
+    if (lastSecond != secondsPast)  // if a second has elapsed...
+    {
+       lastSecond = secondsPast;
+    }
+
+    if (lastMode != mode)  // check to see if button has been pressed... reset time if so.
+    { 
+      millisSinceLastUpate = millis();      
+    }
+
+    if (lastMode != -1 && lastMode == mode && secondsPast > 5 && !dimmed)
+    {  // if we have not just turned on, and our mode has not changed, and we are not dimmed then dim
+      dimmed = true;
+      analogWrite(backlight_pin10,LCD_Dim_Brightness);  // PWM values from 0 to 255 (0% – 100% 
+    } 
+    else // otherwise if we are dimmed, mode has changed or pot has changed then wake up
+    if( dimmed && (lastMode != mode  ||
+        abs(lastPot - pot) > .05 ))
+    {  
+      if (lastMode != mode) 
+      {// after waking up we don't want mode to change so check if it was button press that woke us up
+         mode = decrementButtonValue();
+      } 
+      dimmed = false;
+      analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100% 
+      lastMode = mode;
+      lastPot = pot;
+      millisSinceLastUpate = millis();
+    }   
+
+    lastMode = mode;
+    
+    return mode;
+}
+
+bool isModeButtonHeldDownFor5Secs()
+{  // has the user held down the mode button 
+    static unsigned long  millisSinceLastUpate = millis();
+    static int lastSecond = 0;
+    
+    int secondsPast=(millis()-millisSinceLastUpate)/1000;
+
+    if (isButtonPressed())
+    {    
+       if (lastSecond != secondsPast)  // if a second has elapsed...
+       {
+        Serial.print("mode button pressed for: "); Serial.println(secondsPast);
+          lastSecond = secondsPast;
+          if (secondsPast > 3)
+          {
+            //We are about to return true - we only do that once after button down for 5 secs
+             millisSinceLastUpate = millis(); // ensure we reset timer
+            return true;
+          }
+       }   
+    } else
+     millisSinceLastUpate = millis(); 
+
+   return false;
+//     Serial.print("millisSinceLastUpate :"); Serial.println(millisSinceLastUpate);
+}
+
+void LED_DisplayTheMode()
+{
+    int mode = dimDisplayIfControlsNotRecentlyTouched();
+    float pot = potentiometerScaled();    
+    int vuLevel = 0;
+
+    if (mode ==-1)
+    {
+      savedModeG = mode;
+      printModeInfo(-1);  // after turning on - we loop here until somoene presses the mode button
+      while (-1 == buttonGetValue());
+    }
+
+    
     boolean updateMode = false;
     if(mode != savedModeG)
     {
@@ -160,37 +377,80 @@ void loop()
     {
         savedModeG = mode;
         savedPotG = pot;
-        displayMode(mode);
+        setModeName("");
         switch(mode)
         {
             case 0:
                 mode0(pot);
-                break;
+                setModeName("Color sweep");
+                showModeIsListening(false);
+            break;
             case 1:
                 mode1(pot);
+                setModeName("Rainbow cycle");
+                showModeIsListening(false);
                 break;
             case 2:
+                setModeName("Slow Hue change");
                 mode2(pot);
+                showModeIsListening(false);
                 break;
             case 3:
+                setModeName("Chasing dot");
                 mode3(pot);
+                showModeIsListening(false);
                 break;
             case 4:
+                setModeName("Fire!!");
+                showModeIsListening(false);
                 mode4(pot);
                 break;
             case 5:
+                setModeName("Pulsed light");
+                showModeIsListening(true);
                 mode5(pot);
                 break;
             case 6:
                 mode6(pot);
+                setModeName("Chased light");
+                showModeIsListening(true);
                 break;
             case 7:
+                setModeName("VU Meter");
+                showModeIsListening(true);
                 mode7(pot);
+                vuLevel=map(readPeakToPeak()*1024, 0, 2.2*1024, 0, 17);
+                LCD_BarGraph(vuLevel);
+                break;            
+            case -1:
+            case 255:  // this is -1... just fall out of case statement
                 break;
             default:
                 modeFail(mode);
         }
+        printModeInfo(mode);
     }
+
+}
+void loop()
+{
+
+   static bool displayMode = true;  // we are either in display mode or settings mode
+
+   if (isModeButtonHeldDownFor5Secs())
+   {
+      displayMode = !displayMode;
+      Serial.print("Switching displayMode/settingsMode:"); Serial.println(displayMode);
+   }
+   
+   if (displayMode)
+   {
+    LED_DisplayTheMode();
+   }
+   else
+   {
+       printModeInfo("Settings...");
+   }
 }
 
 
@@ -200,6 +460,21 @@ void loop()
 
 // button
 // ------
+int setButtonMode(uint8_t newValue)
+{  // we use this to preset the mode state for the button control
+    bModeG = newValue;
+    return bModeG;
+}
+int decrementButtonValue()
+{  // we use this to preset the mode state for the button control
+    int currentButtonValue = bModeG;
+    currentButtonValue -= 1;
+    if (currentButtonValue < 0)
+    currentButtonValue = 7;
+    bModeG = currentButtonValue;
+    return bModeG;
+}
+
 int buttonGetValue()
 {
     bool pressed = buttonWasPressed();
@@ -227,6 +502,14 @@ bool buttonWasPressed()
     }
     return pressedState;
 }
+
+bool isButtonPressed()
+{
+    bool currentState = !digitalRead(BUTTON_PIN);
+    
+    return currentState;
+}
+
 
 // microphone
 // ----------
@@ -276,7 +559,10 @@ float readPeakToPeak()
 // scaled from 0 - 1
 float potentiometerScaled()
 {
-    int potLevel = analogRead(POT_PIN);
+    lastPotLevelReading = analogRead(POT_PIN);
+
+    int potLevel = lastPotLevelReading;
+    
     if(potLevel > pMaxPotLevelG)
     {
         pMaxPotLevelG = potLevel + 1;
@@ -290,81 +576,6 @@ float potentiometerScaled()
         ratio = 0.01;
     }
     return ratio;
-}
-
-// display
-// ------
-// takes mode number and changes display to match
-void displayMode(uint8_t mode)
-{
-    /*
-        digitMatrix bit map
-
-            4
-        5       3
-            6
-        0       2
-            1
-    */
-
-    uint8_t digitMatrix[16][dDigitArraySizeG] = {
-        //0 1 2 3 4 5 6
-        { 1,1,1,1,1,1,0 },  // = 0
-        { 0,0,1,1,0,0,0 },  // = 1
-        { 1,1,0,1,1,0,1 },  // = 2
-        { 0,1,1,1,1,0,1 },  // = 3
-        { 0,0,1,1,0,1,1 },  // = 4
-        { 0,1,1,0,1,1,1 },  // = 5
-        { 1,1,1,0,1,1,1 },  // = 6
-        { 0,0,1,1,1,0,0 },  // = 7
-        { 1,1,1,1,1,1,1 },  // = 8
-        { 0,1,1,1,1,1,1 },  // = 9
-        { 1,0,1,1,1,1,1 },  // = A
-        { 1,1,1,0,0,1,1 },  // = b
-        { 1,1,0,0,0,0,1 },  // = c
-        { 1,1,1,1,0,0,1 },  // = d
-        { 1,1,0,0,1,1,1 },  // = E
-        { 1,0,0,0,1,1,1 }   // = F
-    };
-
-    uint8_t currentPin;
-    uint8_t currentIndex;
-    uint8_t matrixElement;
-    uint8_t state;
-    for(uint8_t i = 0; i <= dDigitArraySizeG; i++)
-    {
-        currentPin = DISPLAY_START_PIN + i;
-        if(currentPin < DISPLAY_POINT_PIN)
-        {
-            currentIndex = i;
-        }
-        else if(currentPin == DISPLAY_POINT_PIN)
-        {
-            continue;
-        }
-        else
-        {
-            currentIndex = i - 1;
-        }
-
-        matrixElement = digitMatrix[mode][currentIndex];
-        state = 0;
-        if(matrixElement == 0 )
-        {
-            state = 1;
-        }
-        digitalWrite(currentPin, state);
-    }
-}
-
-void setDisplayPoint(bool display)
-{
-    uint8_t state = 0;
-    if(!display)
-    {
-        state = 1;
-    }
-    digitalWrite(DISPLAY_POINT_PIN, state);
 }
 
 
@@ -421,7 +632,7 @@ void modeInit(uint8_t m)
 
     // a breath before switching modes
     dark();
-    delay(modeChangeDelayG);
+    delay(MODE_CHANGE_DELAY);
 }
 
 
@@ -576,11 +787,11 @@ int offsetHue(uint8_t offset, uint8_t hue, uint8_t maxHue)
 
 unsigned long computeNextIteration(float p)
 {
-    float fRawDelay = maxMillisIterationG * p;
+    float fRawDelay = MAX_MILLIS_ITERATION * p;
     int rawDelay = round(fRawDelay);
 
     // flip
-    unsigned long nextIteration = maxMillisIterationG - rawDelay;
+    unsigned long nextIteration = MAX_MILLIS_ITERATION - rawDelay;
 
     return nextIteration;
 }
@@ -658,7 +869,6 @@ void vuOverSavedParams(float r)
 // pot changes hue
 void mode0(float p)
 {
-    setDisplayPoint(false);
     alwaysUpdateG = false;
 
     float rawHue = 255.0 * p;
@@ -676,7 +886,6 @@ void mode0(float p)
 // pot controls rotation speed
 void mode1(float p)
 {
-    setDisplayPoint(false);
     alwaysUpdateG = true;
 
     // divide color space among given LEDs
@@ -712,7 +921,6 @@ void mode1(float p)
 // pot controls rate of hue change
 void mode2(float p)
 {
-    setDisplayPoint(false);
     alwaysUpdateG = true;
 
     unsigned long currentMillis = millis();
@@ -736,7 +944,6 @@ void mode2(float p)
 // pot controls speed
 void mode3(float p)
 {
-    setDisplayPoint(false);
     alwaysUpdateG = true;
 
     uint8_t lastIndex = lNumG - 1;
@@ -766,7 +973,6 @@ void mode3(float p)
 // pot controls sparking
 void mode4(float p)
 {
-    setDisplayPoint(false);
     alwaysUpdateG = true;
 
     // SPARKING: What chance (out of 255) is there that a new spark will be lit?
@@ -788,7 +994,6 @@ void mode4(float p)
 // pot controls mic peak level
 void mode5(float p)
 {
-    setDisplayPoint(true);
     alwaysUpdateG = true;
 
     uint8_t hue = savedHueG;
@@ -809,7 +1014,7 @@ void mode5(float p)
         // check timing
         unsigned long currentMillis = millis();
         unsigned long millisSinceLastSample = currentMillis - savedLastSampleMillisG;
-        if(millisSinceLastSample > millisUntilOffG)
+        if(millisSinceLastSample > MILLIS_UNTIL_OFF)
         {
             dark();
         }
@@ -833,7 +1038,6 @@ void mode5(float p)
 // pot controls mic peak level
 void mode6(float p)
 {
-    setDisplayPoint(true);
     alwaysUpdateG = true;
 
     uint8_t hue = savedHueG;
@@ -854,7 +1058,7 @@ void mode6(float p)
         // check timing
         unsigned long currentMillis = millis();
         unsigned long millisSinceLastSample = currentMillis - savedLastSampleMillisG;
-        if(millisSinceLastSample > millisUntilOffG)
+        if(millisSinceLastSample > MILLIS_UNTIL_OFF)
         {
             dark();
         }
@@ -900,7 +1104,6 @@ void mode6(float p)
 // pot controls mic peak level
 void mode7(float p)
 {
-    setDisplayPoint(true);
     alwaysUpdateG = true;
 
     // savedParamsG populated by vuOverSavedParamsG() or vuUnderSavedParamsG()
@@ -913,7 +1116,7 @@ void mode7(float p)
         // check timing
         unsigned long currentMillis = millis();
         unsigned long millisSinceLastSample = currentMillis - savedLastSampleMillisG;
-        if(millisSinceLastSample > millisUntilOffG)
+        if(millisSinceLastSample > MILLIS_UNTIL_OFF)
         {
             dark();
         }
@@ -947,7 +1150,7 @@ void mode7(float p)
 
 void modeFail(uint8_t m)
 {
-    Serial.print("invalid mode passed in: ");
+    Serial.print(F("invalid mode passed in: "));
     Serial.println(m);
 }
 
