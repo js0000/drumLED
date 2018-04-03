@@ -21,12 +21,13 @@
    s see misc/hardware.csv
 */
 
-#define _VERSION_ "18.02.02"
+#define _VERSION_ "18.03.01"
 #include <avr/pgmspace.h>
-#include "FastLED.h"
+#include "FastLED.h" 
 #include <Wire.h>
 #include <LCD.h>
 #include <LiquidCrystal_I2C.h>
+#include <EEPROM.h>
 
 LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for an unmodified backpack
 
@@ -200,7 +201,7 @@ void printModeInfo(int mode)
     lcd.print(_VERSION_);
     lcd.setCursor (0,1);        // go to start of 2nd line
     lcd.print(F("Push button"));
-
+    return;
   }
 
 
@@ -279,7 +280,11 @@ int dimDisplayIfControlsNotRecentlyTouched()
     static unsigned long  millisSinceLastUpate = millis();
     static int lastSecond = 0;
     static bool dimmed=false;
-    
+
+    if (isButtonPressed())  // we don't dim if the button is down
+    {   millisSinceLastUpate = millis();
+        return;
+    }
     int secondsPast=(millis()-millisSinceLastUpate)/1000;
         
     if (lastSecond != secondsPast)  // if a second has elapsed...
@@ -317,7 +322,7 @@ int dimDisplayIfControlsNotRecentlyTouched()
     return mode;
 }
 
-bool isModeButtonHeldDownFor5Secs()
+bool isModeButtonHeldDownFor3Secs()
 {  // has the user held down the mode button 
     static unsigned long  millisSinceLastUpate = millis();
     static int lastSecond = 0;
@@ -330,7 +335,7 @@ bool isModeButtonHeldDownFor5Secs()
        {
         Serial.print("mode button pressed for: "); Serial.println(secondsPast);
           lastSecond = secondsPast;
-          if (secondsPast > 3)
+          if (secondsPast > 2)
           {
             //We are about to return true - we only do that once after button down for 5 secs
              millisSinceLastUpate = millis(); // ensure we reset timer
@@ -338,7 +343,14 @@ bool isModeButtonHeldDownFor5Secs()
           }
        }   
     } else
-     millisSinceLastUpate = millis(); 
+    {
+       millisSinceLastUpate = millis(); 
+       if (lastSecond != secondsPast)  // if a second has elapsed...
+       {
+           Serial.print("time passing: "); Serial.println(secondsPast);
+           lastSecond = secondsPast;
+       }
+    }
 
    return false;
 //     Serial.print("millisSinceLastUpate :"); Serial.println(millisSinceLastUpate);
@@ -437,20 +449,33 @@ void loop()
 
    static bool displayMode = true;  // we are either in display mode or settings mode
 
-   if (isModeButtonHeldDownFor5Secs())
-   {
-      displayMode = !displayMode;
-      Serial.print("Switching displayMode/settingsMode:"); Serial.println(displayMode);
-   }
-   
    if (displayMode)
    {
+    static int lastDisplayMode = buttonGetValue();
+    if (buttonGetValue()!= lastDisplayMode) {
+       Serial.print("Mode:");  // only print this when things change
+       Serial.println(buttonGetValue());
+    }
+    lastDisplayMode = buttonGetValue(); 
     LED_DisplayTheMode();
    }
    else
    {
+       lcd.setCursor (0,0);        // go to start of 2nd line
        printModeInfo("Settings...");
+       lcd.setCursor (0,1);        // go to start of 2nd line
+       lcd.print(F("               "));
+
    }
+
+   if (isModeButtonHeldDownFor3Secs())
+   {
+      displayMode = !displayMode;
+      if (displayMode)
+         decrementButtonValue();
+   }
+   
+   
 }
 
 
@@ -470,7 +495,7 @@ int decrementButtonValue()
     int currentButtonValue = bModeG;
     currentButtonValue -= 1;
     if (currentButtonValue < 0)
-    currentButtonValue = 7;
+      currentButtonValue = 7;
     bModeG = currentButtonValue;
     return bModeG;
 }
