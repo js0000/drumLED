@@ -21,7 +21,7 @@
    s see misc/hardware.csv
 */
 
-#define _VERSION_ "18.03.01"
+#define _VERSION_ "18.04.01"
 #include <avr/pgmspace.h>
 #include "FastLED.h" 
 #include <Wire.h>
@@ -59,7 +59,9 @@ LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for a
 // longest time between iterations of LED changes
 #define MAX_MILLIS_ITERATION 1024
 
-
+// EEPROM
+#define EEsize 1024
+#define LAST_MODE 0
 // =======
 // GLOBALS
 // =======
@@ -70,6 +72,7 @@ bool bPressedG = false;
 
 // this is initial mode
 int8_t bModeG = -1;
+int8_t firstMode = -1;
 
 // microphone
 // ----------
@@ -171,7 +174,18 @@ void setup()
     FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, lNumG);
 
     Serial.begin(9600);
-    
+
+    uint8_t eepromLastMode = readEEProm(LAST_MODE);
+    if (eepromLastMode != 255)
+    {
+      Serial.println(" Some mode was stored.");
+      Serial.println(eepromLastMode);
+      firstMode = eepromLastMode;
+      
+    } else
+    {
+      Serial.println(" No mode was stored yet.");
+    }
     strcpy(modeName, "");
 
 }
@@ -195,7 +209,7 @@ void printModeInfo(int mode)
 //  Serial.print(F("printModeInfo ")); Serial.print(mode);
     
   if (mode == -1)
-  {
+  {  // in startup the mode is set to -1
     lcd.clear();
     lcd.print(F("drumLED "));
     lcd.print(_VERSION_);
@@ -224,7 +238,13 @@ void printModeInfo(int mode)
    else 
      lcd.print(F("Mic off"));
    lastMode = mode;
+
+   Serial.print("New mode:");
+   Serial.println(lastMode);
+   writeEEProm(LAST_MODE, lastMode);
   } 
+
+  
   
 }
 
@@ -505,9 +525,16 @@ int buttonGetValue()
     bool pressed = buttonWasPressed();
     if(pressed)
     {
-        uint8_t currentButtonValue = bModeG;
-        currentButtonValue += 1;
-        bModeG = currentButtonValue % 8;
+        if (firstMode == -1)
+        {  // there was no first mode in eeprom memory.  this might be first time turned on.
+          uint8_t currentButtonValue = bModeG;
+          currentButtonValue += 1;
+          bModeG = currentButtonValue % 8;
+        } else
+        {  // after turning on and firstMode read from memory is non-1 means that we have a mode to restore to.
+          bModeG= firstMode;
+          firstMode=-1;
+        }
     }
     return bModeG;
 }
@@ -1177,5 +1204,15 @@ void modeFail(uint8_t m)
 {
     Serial.print(F("invalid mode passed in: "));
     Serial.println(m);
+}
+
+int readEEProm(uint8_t location)
+{
+   return EEPROM.read(location);
+}
+
+void writeEEProm(uint8_t location, uint8_t value )
+{
+    EEPROM.write(location, value);
 }
 
