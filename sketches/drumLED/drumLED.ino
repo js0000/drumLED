@@ -21,9 +21,9 @@
    s see misc/hardware.csv
 */
 
-#define _VERSION_ "18.04.01"
+#define _VERSION_ "18.04.0t"
 #include <avr/pgmspace.h>
-#include "FastLED.h" 
+#include <FastLED.h>
 #include <Wire.h>
 #include <LCD.h>
 #include <LiquidCrystal_I2C.h>
@@ -32,18 +32,24 @@
 LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for an unmodified backpack
 
 // =======
-// DEFINES
 // =======
 
+#define MAXIMUM_MODES_AVAILABLE 9
 #define BUTTON_PIN 4
 #define MIC_PIN A3
-#define POT_PIN A0
-#define DISPLAY_POINT_PIN 9
-#define DISPLAY_START_PIN 6
-#define LED_PIN 3
+#define POT_PIN A1
+
+#define TEENSY
+
+#ifdef TEENSY
+  #define LED_PIN 17
+  #define LED_NUM 100
+#else
+  #define LED_PIN 3
+  #define LED_NUM 148
+#endif
 
 // must be < 256
-#define LED_NUM 148
 
 // both must be between 0-255
 // 'value' == brightness
@@ -155,14 +161,6 @@ void setup()
     pinMode(backlight_pin10, OUTPUT);         // sets pin10 as output
     analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100% 
 
-    // <= i instead of < i
-    // due to inclusion of point pin
-    // which is not accounted for in dDigitArraySizeG
-    for(uint8_t i = 0; i <= dDigitArraySizeG; i++)
-    {
-        uint8_t displayPin = DISPLAY_START_PIN + i;
-        pinMode(displayPin, OUTPUT);
-    }
 
   // activate LCD module
   lcd.begin (16,2); // for 16 x 2 LCD module
@@ -303,7 +301,7 @@ int dimDisplayIfControlsNotRecentlyTouched()
 
     if (isButtonPressed())  // we don't dim if the button is down
     {   millisSinceLastUpate = millis();
-        return;
+        return mode;
     }
     int secondsPast=(millis()-millisSinceLastUpate)/1000;
         
@@ -454,6 +452,13 @@ void LED_DisplayTheMode()
                 vuLevel=map(readPeakToPeak()*1024, 0, 2.2*1024, 0, 17);
                 LCD_BarGraph(vuLevel);
                 break;            
+            case 8:
+                setModeName("Sound level trip");
+                showModeIsListening(true);
+                mode8(pot);
+                vuLevel=map(readPeakToPeak()*1024, 0, 2.2*1024, 0, 17);
+                break;       
+            case MAXIMUM_MODES_AVAILABLE:     
             case -1:
             case 255:  // this is -1... just fall out of case statement
                 break;
@@ -529,7 +534,7 @@ int buttonGetValue()
         {  // there was no first mode in eeprom memory.  this might be first time turned on.
           uint8_t currentButtonValue = bModeG;
           currentButtonValue += 1;
-          bModeG = currentButtonValue % 8;
+          bModeG = currentButtonValue % MAXIMUM_MODES_AVAILABLE;
         } else
         {  // after turning on and firstMode read from memory is non-1 means that we have a mode to restore to.
           bModeG= firstMode;
@@ -1198,6 +1203,22 @@ void mode7(float p)
         }
         FastLED.show();
     }
+}
+
+void mode8(float pot)
+{
+    float rawVolts = readPeakToPeak();
+    float cookedVolts = rawVolts * pot;
+Serial.print("Cooked volts: "); Serial.println(cookedVolts);
+
+   if(cookedVolts <= mVoltFloorG)
+   {
+      for(uint8_t i = 0; i < lNumG; i++)
+      {
+         ledsG[i] = CRGB(255, 255, 255);
+      }
+   }
+    FastLED.show();
 }
 
 void modeFail(uint8_t m)
