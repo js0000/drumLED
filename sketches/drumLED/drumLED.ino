@@ -21,6 +21,10 @@
    s see misc/hardware.csv
 */
 
+// FIXME: comment document
+// use comment blocks to mark of big parts of the code
+// see http://www.sphinx-doc.org/en/master/usage/quickstart.html
+
 #define _VERSION_ "18.04.01"
 #include <avr/pgmspace.h>
 #include "FastLED.h" 
@@ -29,6 +33,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <EEPROM.h>
 
+// FIXME: this goes under LCD in some way ...
 LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for an unmodified backpack
 
 // =======
@@ -59,9 +64,10 @@ LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for a
 // longest time between iterations of LED changes
 #define MAX_MILLIS_ITERATION 1024
 
-// EEPROM
+// FIXME: this goes in hardware config EEPROM
 #define EEsize 1024
 #define LAST_MODE 0
+
 // =======
 // GLOBALS
 // =======
@@ -93,6 +99,7 @@ int mMinRawHueG = 32;
 int pMaxPotLevelG = 672;
 short lastPotLevelReading = 0;
 
+// FIXME: this can be deleted
 // display
 // ------
 const uint8_t dDigitArraySizeG = 7;
@@ -102,6 +109,11 @@ const uint8_t dDigitArraySizeG = 7;
 const uint8_t lNumG = LED_NUM;
 const uint8_t lDefaultValueG = DEFAULT_VALUE;
 const uint8_t lDefaultSaturationG = DEFAULT_SATURATION;
+
+// fastLED data structure
+CRGB ledsG[lNumG];
+
+// FIXME: LCD  ... ?
 //progress bar character for brightness
 byte pBar[8] = {
   B11111,
@@ -113,9 +125,7 @@ byte pBar[8] = {
   B11111,
 };
 
-// fastLED data structure
-CRGB ledsG[lNumG];
-
+// FIXME: eeprom variables go here
 // history
 // -------
 bool alwaysUpdateG = false;
@@ -129,10 +139,7 @@ uint8_t savedLedG = 0;
 unsigned long savedLastSampleMillisG;
 uint8_t savedParamsG[lNumG];
 
-// config
-// ------
-
-
+// FIXME: this is LCD
 //LCD
 #define backlight_pin10 10
 static char modeName[17] = "";
@@ -146,6 +153,8 @@ bool bListening = false;
 // ARDUINO
 // =======
 
+// FIXME: loop function should go here
+
 void setup()
 {
     pinMode(BUTTON_PIN, INPUT);
@@ -155,6 +164,7 @@ void setup()
     pinMode(backlight_pin10, OUTPUT);         // sets pin10 as output
     analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100% 
 
+    // FIXME: this can be deleted
     // <= i instead of < i
     // due to inclusion of point pin
     // which is not accounted for in dDigitArraySizeG
@@ -164,6 +174,7 @@ void setup()
         pinMode(displayPin, OUTPUT);
     }
 
+    // FIXME: LCD initialization into subroutine
   // activate LCD module
   lcd.begin (16,2); // for 16 x 2 LCD module
   lcd.setBacklightPin(3,POSITIVE);
@@ -175,6 +186,7 @@ void setup()
 
     Serial.begin(9600);
 
+    // FIXME: eepROM initializaiton in it's own subroutine
     uint8_t eepromLastMode = readEEProm(LAST_MODE);
     if (eepromLastMode != 255)
     {
@@ -190,6 +202,10 @@ void setup()
 
 }
 
+// FIXME: start external library functions
+// collect functions into logical groups
+// document collections
+
 void setModeName(const char *string)
 {  
    strcpy(modeName, string);
@@ -201,6 +217,7 @@ void printModeInfo(const char *string)
      printModeInfo(0);
 }
 
+// FIXME: a debugging routine
 void printModeInfo(int mode)
 {
   static int lastMode=mode;
@@ -253,6 +270,7 @@ void showModeIsListening(bool listening)
  bListening = listening;
 }
 
+// FIXME: this is a utility mode called by several methods
 void LCD_BarGraph(short level)
 {
   int i;
@@ -271,6 +289,8 @@ void LCD_BarGraph(short level)
 
 
 }
+
+// FIXME: this can be a mode
 void loopBarGraph()
 {  //this is loop() function that just displays the bargraph controlled by the potentiometer on the lcd display
    int level = 0;         // progress bar
@@ -288,6 +308,7 @@ void loopBarGraph()
 
 }
 
+// FIXME: LCD maintenance
 int dimDisplayIfControlsNotRecentlyTouched()
 {
     
@@ -342,6 +363,7 @@ int dimDisplayIfControlsNotRecentlyTouched()
     return mode;
 }
 
+// FIXME: i don't think long press is worth doing
 bool isModeButtonHeldDownFor3Secs()
 {  // has the user held down the mode button 
     static unsigned long  millisSinceLastUpate = millis();
@@ -376,6 +398,8 @@ bool isModeButtonHeldDownFor3Secs()
 //     Serial.print("millisSinceLastUpate :"); Serial.println(millisSinceLastUpate);
 }
 
+// FIXME: there should only be one loop, with everything in it
+// this is a debugging mode
 void LED_DisplayTheMode()
 {
     int mode = dimDisplayIfControlsNotRecentlyTouched();
@@ -464,6 +488,8 @@ void LED_DisplayTheMode()
     }
 
 }
+
+// FIXME: loop is way too complex, needs to be abstracted
 void loop()
 {
 
@@ -1206,6 +1232,7 @@ void modeFail(uint8_t m)
     Serial.println(m);
 }
 
+// FIXME: these should go in eeprom hardware section
 int readEEProm(uint8_t location)
 {
    return EEPROM.read(location);
@@ -1215,4 +1242,5 @@ void writeEEProm(uint8_t location, uint8_t value )
 {
     EEPROM.write(location, value);
 }
+
 
