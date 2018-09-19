@@ -1,25 +1,25 @@
 /*
 
-    drumLED.ino
-    bkinky lights from the arduino
+   drumLED.ino
+   bkinky lights from the arduino
 
-    version 1.0
+   version 1.0
 
-    8 modes
+   8 modes
 
-    see misc/modes.csv
+   see misc/modes.csv
 
-    inputs
-    - button
-    - microphone
-    - potentiometer
+   inputs
+   - button
+   - microphone
+   - potentiometer
 
-    outputs
-    - display
-    - led
+   outputs
+   - display
+   - led
 
    s see misc/hardware.csv
-*/
+ */
 
 // FIXME: comment document
 // use comment blocks to mark of big parts of the code
@@ -27,7 +27,7 @@
 
 #define _VERSION_ "18.04.01"
 #include <avr/pgmspace.h>
-#include "FastLED.h" 
+#include "FastLED.h"
 #include <Wire.h>
 #include <LCD.h>
 #include <LiquidCrystal_I2C.h>
@@ -116,13 +116,13 @@ CRGB ledsG[lNumG];
 // FIXME: LCD  ... ?
 //progress bar character for brightness
 byte pBar[8] = {
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111,
-  B11111,
+    B11111,
+    B11111,
+    B11111,
+    B11111,
+    B11111,
+    B11111,
+    B11111,
 };
 
 // FIXME: eeprom variables go here
@@ -148,7 +148,7 @@ bool bListening = false;
 #define LCD_ON_Brightness 128
 #define LCD_Dim_Brightness 1
 
- 
+
 // =======
 // ARDUINO
 // =======
@@ -162,7 +162,7 @@ void setup()
     pinMode(POT_PIN, INPUT);
 
     pinMode(backlight_pin10, OUTPUT);         // sets pin10 as output
-    analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100% 
+    analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100%
 
     // FIXME: this can be deleted
     // <= i instead of < i
@@ -175,13 +175,13 @@ void setup()
     }
 
     // FIXME: LCD initialization into subroutine
-  // activate LCD module
-  lcd.begin (16,2); // for 16 x 2 LCD module
-  lcd.setBacklightPin(3,POSITIVE);
-  lcd.setBacklight(HIGH);
-  lcd.clear();
-  lcd.createChar(0, pBar);
-    
+    // activate LCD module
+    lcd.begin (16,2); // for 16 x 2 LCD module
+    lcd.setBacklightPin(3,POSITIVE);
+    lcd.setBacklight(HIGH);
+    lcd.clear();
+    lcd.createChar(0, pBar);
+
     FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, lNumG);
 
     Serial.begin(9600);
@@ -190,13 +190,13 @@ void setup()
     uint8_t eepromLastMode = readEEProm(LAST_MODE);
     if (eepromLastMode != 255)
     {
-      Serial.println(" Some mode was stored.");
-      Serial.println(eepromLastMode);
-      firstMode = eepromLastMode;
-      
+        Serial.println(" Some mode was stored.");
+        Serial.println(eepromLastMode);
+        firstMode = eepromLastMode;
+
     } else
     {
-      Serial.println(" No mode was stored yet.");
+        Serial.println(" No mode was stored yet.");
     }
     strcpy(modeName, "");
 
@@ -207,85 +207,85 @@ void setup()
 // document collections
 
 void setModeName(const char *string)
-{  
-   strcpy(modeName, string);
+{
+    strcpy(modeName, string);
 }
 
 void printModeInfo(const char *string)
 {
-     strcpy(modeName, string);
-     printModeInfo(0);
+    strcpy(modeName, string);
+    printModeInfo(0);
 }
 
 // FIXME: a debugging routine
 void printModeInfo(int mode)
 {
-  static int lastMode=mode;
-
-  
-//  Serial.print(F("printModeInfo ")); Serial.print(mode);
-    
-  if (mode == -1)
-  {  // in startup the mode is set to -1
-    lcd.clear();
-    lcd.print(F("drumLED "));
-    lcd.print(_VERSION_);
-    lcd.setCursor (0,1);        // go to start of 2nd line
-    lcd.print(F("Push button"));
-    return;
-  }
+    static int lastMode=mode;
 
 
-  if (lastMode != mode)
-  {
-   lcd.clear();
-   lcd.home (); // set cursor to 0,0
-   lcd.setCursor (0,0);        // go to start of 2nd line
-   if (!modeName[0])
-   {
-      lcd.print(F("Mode :"));  lcd.print(mode);
-   }
-   else
-   {
-      lcd.print(modeName);
-   }     
-   lcd.setCursor (0,1);        // go to start of 2nd line
-   if (bListening)
-     lcd.print(F("Mic on "));
-   else 
-     lcd.print(F("Mic off"));
-   lastMode = mode;
+    //  Serial.print(F("printModeInfo ")); Serial.print(mode);
 
-   Serial.print("New mode:");
-   Serial.println(lastMode);
-   writeEEProm(LAST_MODE, lastMode);
-  } 
+    if (mode == -1)
+    {  // in startup the mode is set to -1
+        lcd.clear();
+        lcd.print(F("drumLED "));
+        lcd.print(_VERSION_);
+        lcd.setCursor (0,1);        // go to start of 2nd line
+        lcd.print(F("Push button"));
+        return;
+    }
 
-  
-  
+
+    if (lastMode != mode)
+    {
+        lcd.clear();
+        lcd.home (); // set cursor to 0,0
+        lcd.setCursor (0,0);        // go to start of 2nd line
+        if (!modeName[0])
+        {
+            lcd.print(F("Mode :"));  lcd.print(mode);
+        }
+        else
+        {
+            lcd.print(modeName);
+        }
+        lcd.setCursor (0,1);        // go to start of 2nd line
+        if (bListening)
+            lcd.print(F("Mic on "));
+        else
+            lcd.print(F("Mic off"));
+        lastMode = mode;
+
+        Serial.print("New mode:");
+        Serial.println(lastMode);
+        writeEEProm(LAST_MODE, lastMode);
+    }
+
+
+
 }
 
 void showModeIsListening(bool listening)
 {
- bListening = listening;
+    bListening = listening;
 }
 
 // FIXME: this is a utility mode called by several methods
 void LCD_BarGraph(short level)
 {
-  int i;
-  
-  //prints the progress bar
-  for (i=0; i<level; i++)
-  {
-    lcd.setCursor(i, 1);   
-    lcd.write(byte(0));  
-  }
-  for (i=level; i<16; i++)
-  {
-    lcd.setCursor(i, 1);   
-    lcd.write(" ");  
-  }
+    int i;
+
+    //prints the progress bar
+    for (i=0; i<level; i++)
+    {
+        lcd.setCursor(i, 1);
+        lcd.write(byte(0));
+    }
+    for (i=level; i<16; i++)
+    {
+        lcd.setCursor(i, 1);
+            lcd.write(" ");
+    }
 
 
 }
@@ -293,17 +293,17 @@ void LCD_BarGraph(short level)
 // FIXME: this can be a mode
 void loopBarGraph()
 {  //this is loop() function that just displays the bargraph controlled by the potentiometer on the lcd display
-   int level = 0;         // progress bar
-   int i;
-  // clears the LCD screen
-   lcd.setCursor(0, 0);   
-   lcd.write("This is a test");  
-      
-   level=map(potentiometerScaled()*1024, 0, 1024, 0, 17);
-   LCD_BarGraph(level);
-  
-  // delays 750 ms
-  delay(75);        
+    int level = 0;         // progress bar
+    int i;
+    // clears the LCD screen
+    lcd.setCursor(0, 0);
+    lcd.write("This is a test");
+
+    level=map(potentiometerScaled()*1024, 0, 1024, 0, 17);
+    LCD_BarGraph(level);
+
+    // delays 750 ms
+    delay(75);
 
 
 }
@@ -311,11 +311,11 @@ void loopBarGraph()
 // FIXME: LCD maintenance
 int dimDisplayIfControlsNotRecentlyTouched()
 {
-    
+
     int mode = buttonGetValue();
     float pot = potentiometerScaled();
-    
-      // variables used to keep track time since any control was touched.
+
+    // variables used to keep track time since any control was touched.
     static int lastMode = mode;
     static float lastPot = pot;
     static unsigned long  millisSinceLastUpate = millis();
@@ -324,78 +324,80 @@ int dimDisplayIfControlsNotRecentlyTouched()
 
     if (isButtonPressed())  // we don't dim if the button is down
     {   millisSinceLastUpate = millis();
-        return;
+        // FIXME: returned mode because arduino syntax demands it
+        // maybe there is something better to return
+        return mode;
     }
     int secondsPast=(millis()-millisSinceLastUpate)/1000;
-        
+
     if (lastSecond != secondsPast)  // if a second has elapsed...
     {
-       lastSecond = secondsPast;
+        lastSecond = secondsPast;
     }
 
     if (lastMode != mode)  // check to see if button has been pressed... reset time if so.
-    { 
-      millisSinceLastUpate = millis();      
+    {
+        millisSinceLastUpate = millis();
     }
 
     if (lastMode != -1 && lastMode == mode && secondsPast > 5 && !dimmed)
     {  // if we have not just turned on, and our mode has not changed, and we are not dimmed then dim
-      dimmed = true;
-      analogWrite(backlight_pin10,LCD_Dim_Brightness);  // PWM values from 0 to 255 (0% – 100% 
-    } 
+        dimmed = true;
+        analogWrite(backlight_pin10,LCD_Dim_Brightness);  // PWM values from 0 to 255 (0% – 100%
+    }
     else // otherwise if we are dimmed, mode has changed or pot has changed then wake up
-    if( dimmed && (lastMode != mode  ||
-        abs(lastPot - pot) > .05 ))
-    {  
-      if (lastMode != mode) 
-      {// after waking up we don't want mode to change so check if it was button press that woke us up
-         mode = decrementButtonValue();
-      } 
-      dimmed = false;
-      analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100% 
-      lastMode = mode;
-      lastPot = pot;
-      millisSinceLastUpate = millis();
-    }   
+        if( dimmed && (lastMode != mode  ||
+                    abs(lastPot - pot) > .05 ))
+        {
+            if (lastMode != mode)
+            {// after waking up we don't want mode to change so check if it was button press that woke us up
+                mode = decrementButtonValue();
+            }
+            dimmed = false;
+            analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100%
+            lastMode = mode;
+            lastPot = pot;
+            millisSinceLastUpate = millis();
+        }
 
     lastMode = mode;
-    
+
     return mode;
 }
 
 // FIXME: i don't think long press is worth doing
 bool isModeButtonHeldDownFor3Secs()
-{  // has the user held down the mode button 
+{  // has the user held down the mode button
     static unsigned long  millisSinceLastUpate = millis();
     static int lastSecond = 0;
-    
+
     int secondsPast=(millis()-millisSinceLastUpate)/1000;
 
     if (isButtonPressed())
-    {    
-       if (lastSecond != secondsPast)  // if a second has elapsed...
-       {
-        Serial.print("mode button pressed for: "); Serial.println(secondsPast);
-          lastSecond = secondsPast;
-          if (secondsPast > 2)
-          {
-            //We are about to return true - we only do that once after button down for 5 secs
-             millisSinceLastUpate = millis(); // ensure we reset timer
-            return true;
-          }
-       }   
+    {
+        if (lastSecond != secondsPast)  // if a second has elapsed...
+        {
+            Serial.print("mode button pressed for: "); Serial.println(secondsPast);
+            lastSecond = secondsPast;
+            if (secondsPast > 2)
+            {
+                //We are about to return true - we only do that once after button down for 5 secs
+                millisSinceLastUpate = millis(); // ensure we reset timer
+                return true;
+            }
+        }
     } else
     {
-       millisSinceLastUpate = millis(); 
-       if (lastSecond != secondsPast)  // if a second has elapsed...
-       {
-           Serial.print("time passing: "); Serial.println(secondsPast);
-           lastSecond = secondsPast;
-       }
+        millisSinceLastUpate = millis();
+        if (lastSecond != secondsPast)  // if a second has elapsed...
+        {
+            Serial.print("time passing: "); Serial.println(secondsPast);
+            lastSecond = secondsPast;
+        }
     }
 
-   return false;
-//     Serial.print("millisSinceLastUpate :"); Serial.println(millisSinceLastUpate);
+    return false;
+    //     Serial.print("millisSinceLastUpate :"); Serial.println(millisSinceLastUpate);
 }
 
 // FIXME: there should only be one loop, with everything in it
@@ -403,17 +405,17 @@ bool isModeButtonHeldDownFor3Secs()
 void LED_DisplayTheMode()
 {
     int mode = dimDisplayIfControlsNotRecentlyTouched();
-    float pot = potentiometerScaled();    
+    float pot = potentiometerScaled();
     int vuLevel = 0;
 
     if (mode ==-1)
     {
-      savedModeG = mode;
-      printModeInfo(-1);  // after turning on - we loop here until somoene presses the mode button
-      while (-1 == buttonGetValue());
+        savedModeG = mode;
+        printModeInfo(-1);  // after turning on - we loop here until somoene presses the mode button
+        while (-1 == buttonGetValue());
     }
 
-    
+
     boolean updateMode = false;
     if(mode != savedModeG)
     {
@@ -440,7 +442,7 @@ void LED_DisplayTheMode()
                 mode0(pot);
                 setModeName("Color sweep");
                 showModeIsListening(false);
-            break;
+                break;
             case 1:
                 mode1(pot);
                 setModeName("Rainbow cycle");
@@ -477,7 +479,7 @@ void LED_DisplayTheMode()
                 mode7(pot);
                 vuLevel=map(readPeakToPeak()*1024, 0, 2.2*1024, 0, 17);
                 LCD_BarGraph(vuLevel);
-                break;            
+                break;
             case -1:
             case 255:  // this is -1... just fall out of case statement
                 break;
@@ -493,35 +495,35 @@ void LED_DisplayTheMode()
 void loop()
 {
 
-   static bool displayMode = true;  // we are either in display mode or settings mode
+    static bool displayMode = true;  // we are either in display mode or settings mode
 
-   if (displayMode)
-   {
-    static int lastDisplayMode = buttonGetValue();
-    if (buttonGetValue()!= lastDisplayMode) {
-       Serial.print("Mode:");  // only print this when things change
-       Serial.println(buttonGetValue());
+    if (displayMode)
+    {
+        static int lastDisplayMode = buttonGetValue();
+        if (buttonGetValue()!= lastDisplayMode) {
+            Serial.print("Mode:");  // only print this when things change
+            Serial.println(buttonGetValue());
+        }
+        lastDisplayMode = buttonGetValue();
+        LED_DisplayTheMode();
     }
-    lastDisplayMode = buttonGetValue(); 
-    LED_DisplayTheMode();
-   }
-   else
-   {
-       lcd.setCursor (0,0);        // go to start of 2nd line
-       printModeInfo("Settings...");
-       lcd.setCursor (0,1);        // go to start of 2nd line
-       lcd.print(F("               "));
+    else
+    {
+        lcd.setCursor (0,0);        // go to start of 2nd line
+        printModeInfo("Settings...");
+        lcd.setCursor (0,1);        // go to start of 2nd line
+        lcd.print(F("               "));
 
-   }
+    }
 
-   if (isModeButtonHeldDownFor3Secs())
-   {
-      displayMode = !displayMode;
-      if (displayMode)
-         decrementButtonValue();
-   }
-   
-   
+    if (isModeButtonHeldDownFor3Secs())
+    {
+        displayMode = !displayMode;
+        if (displayMode)
+            decrementButtonValue();
+    }
+
+
 }
 
 
@@ -541,7 +543,7 @@ int decrementButtonValue()
     int currentButtonValue = bModeG;
     currentButtonValue -= 1;
     if (currentButtonValue < 0)
-      currentButtonValue = 7;
+        currentButtonValue = 7;
     bModeG = currentButtonValue;
     return bModeG;
 }
@@ -553,13 +555,13 @@ int buttonGetValue()
     {
         if (firstMode == -1)
         {  // there was no first mode in eeprom memory.  this might be first time turned on.
-          uint8_t currentButtonValue = bModeG;
-          currentButtonValue += 1;
-          bModeG = currentButtonValue % 8;
+            uint8_t currentButtonValue = bModeG;
+            currentButtonValue += 1;
+            bModeG = currentButtonValue % 8;
         } else
         {  // after turning on and firstMode read from memory is non-1 means that we have a mode to restore to.
-          bModeG= firstMode;
-          firstMode=-1;
+            bModeG= firstMode;
+            firstMode=-1;
         }
     }
     return bModeG;
@@ -584,7 +586,7 @@ bool buttonWasPressed()
 bool isButtonPressed()
 {
     bool currentState = !digitalRead(BUTTON_PIN);
-    
+
     return currentState;
 }
 
@@ -640,7 +642,7 @@ float potentiometerScaled()
     lastPotLevelReading = analogRead(POT_PIN);
 
     int potLevel = lastPotLevelReading;
-    
+
     if(potLevel > pMaxPotLevelG)
     {
         pMaxPotLevelG = potLevel + 1;
@@ -759,30 +761,30 @@ void Fire2012(uint8_t fs)
 
     // Step 1.  Cool down every cell a little
     for( uint8_t i = 0; i < lNumG; i++) {
-      heat[i] = qsub8( heat[i],  random8(0, ((fireCooling * 10) / lNumG) + 2));
+        heat[i] = qsub8( heat[i],  random8(0, ((fireCooling * 10) / lNumG) + 2));
     }
 
     // Step 2.  Heat from each cell drifts 'up' and diffuses a little
     for( uint8_t k= lNumG - 1; k >= 2; k--) {
-      heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
+        heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
     }
 
     // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
     if( random8() < fireSparking ) {
-      uint8_t y = random8(7);
-      heat[y] = qadd8( heat[y], random8(160,255) );
+        uint8_t y = random8(7);
+        heat[y] = qadd8( heat[y], random8(160,255) );
     }
 
     // Step 4.  Map from heat cells to LED colors
     for( uint8_t j = 0; j < lNumG; j++) {
-      CRGB color = HeatColor( heat[j]);
-      uint8_t pixelnumber;
-      if( gReverseDirection ) {
-        pixelnumber = (lNumG - 1) - j;
-      } else {
-        pixelnumber = j;
-      }
-      ledsG[pixelnumber] = color;
+        CRGB color = HeatColor( heat[j]);
+        uint8_t pixelnumber;
+        if( gReverseDirection ) {
+            pixelnumber = (lNumG - 1) - j;
+        } else {
+            pixelnumber = j;
+        }
+        ledsG[pixelnumber] = color;
     }
 }
 
@@ -988,7 +990,7 @@ void mode1(float p)
             ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
             if(i == 0)
             {
-                 savedHueG = hue;
+                savedHueG = hue;
             }
         }
         FastLED.show();
@@ -1235,7 +1237,7 @@ void modeFail(uint8_t m)
 // FIXME: these should go in eeprom hardware section
 int readEEProm(uint8_t location)
 {
-   return EEPROM.read(location);
+    return EEPROM.read(location);
 }
 
 void writeEEProm(uint8_t location, uint8_t value )
