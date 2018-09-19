@@ -7,13 +7,13 @@ makin blinkin lights fer yer bloody bass drum.
 ![No screenshot](https://github.com/js0000/drumLED/blob/master/screenshot.png "no screenshot")
 
 ## Download
-* [Version 20](https://github.com/js0000/drumLED/archive/master.zip)
+* [Version 2.1](https://github.com/js0000/drumLED/archive/master.zip)
 
 ## License 
 * see [LICENSE](https://github.com/js0000/drumLED/blob/master/LICENSE) file
 
 ## Version 
-* Version 20
+* Version 2.1
 
 ## Contributors
 ### Third party libraries
