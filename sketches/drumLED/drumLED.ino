@@ -1,31 +1,37 @@
 /*
 
    drumLED.ino
+   ===========
+
    bkinky lights from the arduino
+   version 2.1
 
-   version 1.0
-
-   8 modes
+   modes
+   -----
 
    see misc/modes.csv
 
    inputs
+   ------
+
    - button
    - microphone
    - potentiometer
 
    outputs
-   - display
-   - led
+   -------
 
-   s see misc/hardware.csv
+   - LCD
+   - LEDs
+
+   hardware
+   --------
+
+   see misc/hardware.csv
  */
 
-// FIXME: comment document
-// use comment blocks to mark of big parts of the code
-// see http://www.sphinx-doc.org/en/master/usage/quickstart.html
 
-#define _VERSION_ "18.04.01"
+#define _VERSION_ "2.1"
 #include <avr/pgmspace.h>
 #include "FastLED.h"
 #include <Wire.h>
@@ -33,13 +39,15 @@
 #include <LiquidCrystal_I2C.h>
 #include <EEPROM.h>
 
-// FIXME: this goes under LCD in some way ...
-LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for an unmodified backpack
 
-// =======
-// DEFINES
-// =======
+/*
 
+   DEFINES
+   =======
+
+ */
+
+// hardware config
 #define BUTTON_PIN 4
 #define MIC_PIN A3
 #define POT_PIN A0
@@ -64,8 +72,7 @@ LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for a
 // longest time between iterations of LED changes
 #define MAX_MILLIS_ITERATION 1024
 
-// FIXME: this goes in hardware config EEPROM
-#define EEsize 1024
+// FIXME: this is global variable not a define
 #define LAST_MODE 0
 
 // =======
@@ -99,11 +106,6 @@ int mMinRawHueG = 32;
 int pMaxPotLevelG = 672;
 short lastPotLevelReading = 0;
 
-// FIXME: this can be deleted
-// display
-// ------
-const uint8_t dDigitArraySizeG = 7;
-
 // led
 // ---
 const uint8_t lNumG = LED_NUM;
@@ -113,7 +115,20 @@ const uint8_t lDefaultSaturationG = DEFAULT_SATURATION;
 // fastLED data structure
 CRGB ledsG[lNumG];
 
-// FIXME: LCD  ... ?
+// lcd
+// ---
+// FIXME: these should be up in defines section
+// or made into global vars
+#define backlight_pin10 10
+#define LCD_ON_Brightness 128
+#define LCD_Dim_Brightness 1
+
+// FIXME: what is a mode definition doing here?
+static char modeName[17] = "";
+
+// is this about listening to the button press?
+bool bListening = false;
+
 //progress bar character for brightness
 byte pBar[8] = {
     B11111,
@@ -125,7 +140,16 @@ byte pBar[8] = {
     B11111,
 };
 
-// FIXME: eeprom variables go here
+// 0x27 is the I2C bus address for an unmodified backpack
+LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7);
+
+// eeprom
+// ------
+
+// FIXME: this is not referenced anywhere
+// #define EEsize 1024
+
+
 // history
 // -------
 bool alwaysUpdateG = false;
@@ -139,21 +163,47 @@ uint8_t savedLedG = 0;
 unsigned long savedLastSampleMillisG;
 uint8_t savedParamsG[lNumG];
 
-// FIXME: this is LCD
-//LCD
-#define backlight_pin10 10
-static char modeName[17] = "";
-bool bListening = false;
-//LCD parameters
-#define LCD_ON_Brightness 128
-#define LCD_Dim_Brightness 1
 
 
 // =======
 // ARDUINO
 // =======
 
-// FIXME: loop function should go here
+// FIXME: loop is way too complex, needs to be abstracted
+void loop()
+{
+
+    static bool displayMode = true;  // we are either in display mode or settings mode
+
+    if (displayMode)
+    {
+        static int lastDisplayMode = buttonGetValue();
+        if (buttonGetValue()!= lastDisplayMode) {
+            Serial.print("Mode:");  // only print this when things change
+            Serial.println(buttonGetValue());
+        }
+        lastDisplayMode = buttonGetValue();
+        LED_DisplayTheMode();
+    }
+    else
+    {
+        lcd.setCursor (0,0);        // go to start of 2nd line
+        printModeInfo("Settings...");
+        lcd.setCursor (0,1);        // go to start of 2nd line
+        lcd.print(F("               "));
+
+    }
+
+    if (isModeButtonHeldDownFor3Secs())
+    {
+        displayMode = !displayMode;
+        if (displayMode)
+            decrementButtonValue();
+    }
+
+
+}
+
 
 void setup()
 {
@@ -163,16 +213,6 @@ void setup()
 
     pinMode(backlight_pin10, OUTPUT);         // sets pin10 as output
     analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100%
-
-    // FIXME: this can be deleted
-    // <= i instead of < i
-    // due to inclusion of point pin
-    // which is not accounted for in dDigitArraySizeG
-    for(uint8_t i = 0; i <= dDigitArraySizeG; i++)
-    {
-        uint8_t displayPin = DISPLAY_START_PIN + i;
-        pinMode(displayPin, OUTPUT);
-    }
 
     // FIXME: LCD initialization into subroutine
     // activate LCD module
@@ -284,7 +324,7 @@ void LCD_BarGraph(short level)
     for (i=level; i<16; i++)
     {
         lcd.setCursor(i, 1);
-            lcd.write(" ");
+        lcd.write(" ");
     }
 
 
@@ -491,41 +531,6 @@ void LED_DisplayTheMode()
 
 }
 
-// FIXME: loop is way too complex, needs to be abstracted
-void loop()
-{
-
-    static bool displayMode = true;  // we are either in display mode or settings mode
-
-    if (displayMode)
-    {
-        static int lastDisplayMode = buttonGetValue();
-        if (buttonGetValue()!= lastDisplayMode) {
-            Serial.print("Mode:");  // only print this when things change
-            Serial.println(buttonGetValue());
-        }
-        lastDisplayMode = buttonGetValue();
-        LED_DisplayTheMode();
-    }
-    else
-    {
-        lcd.setCursor (0,0);        // go to start of 2nd line
-        printModeInfo("Settings...");
-        lcd.setCursor (0,1);        // go to start of 2nd line
-        lcd.print(F("               "));
-
-    }
-
-    if (isModeButtonHeldDownFor3Secs())
-    {
-        displayMode = !displayMode;
-        if (displayMode)
-            decrementButtonValue();
-    }
-
-
-}
-
 
 // ======
 // HARDWARE
@@ -657,6 +662,21 @@ float potentiometerScaled()
     }
     return ratio;
 }
+
+
+// eeprom
+// ------
+
+int readEEProm(uint8_t location)
+{
+    return EEPROM.read(location);
+}
+
+void writeEEProm(uint8_t location, uint8_t value )
+{
+    EEPROM.write(location, value);
+}
+
 
 
 // ==============
@@ -1233,16 +1253,3 @@ void modeFail(uint8_t m)
     Serial.print(F("invalid mode passed in: "));
     Serial.println(m);
 }
-
-// FIXME: these should go in eeprom hardware section
-int readEEProm(uint8_t location)
-{
-    return EEPROM.read(location);
-}
-
-void writeEEProm(uint8_t location, uint8_t value )
-{
-    EEPROM.write(location, value);
-}
-
-
