@@ -31,7 +31,6 @@
  */
 
 
-#define _VERSION_ "2.1"
 #include <avr/pgmspace.h>
 #include "FastLED.h"
 #include <Wire.h>
@@ -45,7 +44,16 @@
    DEFINES
    =======
 
+FIXME: document all defines
+
+version
+release version of code
  */
+
+#define _VERSION_ "2.1"
+
+// set to non-zero for serial output
+#define _DEBUG_ 0
 
 // hardware config
 #define BUTTON_PIN 4
@@ -54,6 +62,7 @@
 #define DISPLAY_POINT_PIN 9
 #define DISPLAY_START_PIN 6
 #define LED_PIN 3
+#define LCD_BACKLIGHT_PIN 10
 
 // must be < 256
 #define LED_NUM 148
@@ -62,6 +71,11 @@
 // 'value' == brightness
 #define DEFAULT_VALUE 64
 #define DEFAULT_SATURATION 255
+
+// LCD range
+// FIXME: what are absolute limits on these values
+#define LCD_BRIGHTNESS_ON 128
+#define LCD_BRIGHTNESS_DIM 1
 
 // break between modes: in milliseconds
 #define MODE_CHANGE_DELAY 256
@@ -73,7 +87,9 @@
 #define MAX_MILLIS_ITERATION 1024
 
 // FIXME: this is global variable not a define
+//        and may likely be unnecessary
 #define LAST_MODE 0
+
 
 // =======
 // GLOBALS
@@ -101,6 +117,9 @@ const float mVoltFloorG = 0.05;
 int mMaxRawHueG = 192;
 int mMinRawHueG = 32;
 
+// microphone is on
+bool mListeningG = false;
+
 // potentiometer
 // -------------
 int pMaxPotLevelG = 672;
@@ -108,29 +127,20 @@ short lastPotLevelReading = 0;
 
 // led
 // ---
-const uint8_t lNumG = LED_NUM;
-const uint8_t lDefaultValueG = DEFAULT_VALUE;
-const uint8_t lDefaultSaturationG = DEFAULT_SATURATION;
+const uint8_t ledNumG = LED_NUM;
+const uint8_t ledDefaultValueG = DEFAULT_VALUE;
+const uint8_t ledDefaultSaturationG = DEFAULT_SATURATION;
 
 // fastLED data structure
-CRGB ledsG[lNumG];
+CRGB ledsG[ledNumG];
 
 // lcd
 // ---
-// FIXME: these should be up in defines section
-// or made into global vars
-#define backlight_pin10 10
-#define LCD_ON_Brightness 128
-#define LCD_Dim_Brightness 1
-
-// FIXME: what is a mode definition doing here?
-static char modeName[17] = "";
-
-// is this about listening to the button press?
-bool bListening = false;
+const uint8_t lcdBrightnessOnG = LCD_BRIGHTNESS_ON;
+const uint8_t lcdBrightnessDimG = LCD_BRIGHTNESS_DIM;
 
 //progress bar character for brightness
-byte pBar[8] = {
+byte lcdProgressBarG[8] = {
     B11111,
     B11111,
     B11111,
@@ -143,17 +153,14 @@ byte pBar[8] = {
 // 0x27 is the I2C bus address for an unmodified backpack
 LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7);
 
-// eeprom
-// ------
-
-// FIXME: this is not referenced anywhere
-// #define EEsize 1024
-
 
 // history
 // -------
 bool alwaysUpdateG = false;
 uint8_t savedModeG = 0;
+// FIXME: savedLastModeG might be duplicate of savedModeG
+// also lastDisplayMode within loop()
+uint8_t savedLastModeG = LAST_MODE;
 
 // saved on scale from 0 to 1
 float savedPotG;
@@ -161,7 +168,14 @@ unsigned long savedTargetMillisG = 0;
 uint8_t savedHueG = 0;
 uint8_t savedLedG = 0;
 unsigned long savedLastSampleMillisG;
-uint8_t savedParamsG[lNumG];
+uint8_t savedParamsG[ledNumG];
+
+// debugging
+// ---------
+bool debugG = true;
+
+// FIXME: this belongs somewhere else
+static char modeName[17] = "";
 
 
 
@@ -172,35 +186,41 @@ uint8_t savedParamsG[lNumG];
 // FIXME: loop is way too complex, needs to be abstracted
 void loop()
 {
+    /*
+FIXME: avoid mode types
+settings change code within a normal mode
+no need for mode type flag
 
-    static bool displayMode = true;  // we are either in display mode or settings mode
+    // we are either in display mode or settings mode
+    static bool displayMode = true;
+     */
 
-    if (displayMode)
-    {
-        static int lastDisplayMode = buttonGetValue();
-        if (buttonGetValue()!= lastDisplayMode) {
-            Serial.print("Mode:");  // only print this when things change
-            Serial.println(buttonGetValue());
-        }
-        lastDisplayMode = buttonGetValue();
-        LED_DisplayTheMode();
+    //if (displayMode)
+    //{
+    static int lastDisplayMode = buttonGetValue();
+    if(debugG && buttonGetValue()!= lastDisplayMode) {
+        Serial.print("Mode:");  // only print this when things change
+        Serial.println(buttonGetValue());
     }
-    else
-    {
-        lcd.setCursor (0,0);        // go to start of 2nd line
-        printModeInfo("Settings...");
-        lcd.setCursor (0,1);        // go to start of 2nd line
-        lcd.print(F("               "));
+    lastDisplayMode = buttonGetValue();
+    LED_DisplayTheMode();
+    //}
+    /*
+       else
+       {
+       lcd.setCursor (0,0);        // go to start of 2nd line
+       printModeInfo("Settings...");
+       lcd.setCursor (0,1);        // go to start of 2nd line
+       lcd.print(F("               "));
 
-    }
-
-    if (isModeButtonHeldDownFor3Secs())
-    {
-        displayMode = !displayMode;
-        if (displayMode)
-            decrementButtonValue();
-    }
-
+       }
+       if (isModeButtonHeldDownFor3Secs())
+       {
+       displayMode = !displayMode;
+       if (displayMode)
+       decrementButtonValue();
+       }
+     */
 
 }
 
@@ -210,9 +230,14 @@ void setup()
     pinMode(BUTTON_PIN, INPUT);
     pinMode(MIC_PIN, INPUT);
     pinMode(POT_PIN, INPUT);
+    pinMode(LCD_BACKLIGHT_PIN, OUTPUT);
 
-    pinMode(backlight_pin10, OUTPUT);         // sets pin10 as output
-    analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100%
+    // set debugging var
+    if(_DEBUG_ == 0) {
+        debugG = false;
+    }
+
+    analogWrite(LCD_BACKLIGHT_PIN,lcdBrightnessOnG);  // PWM values from 0 to 255 (0% – 100%
 
     // FIXME: LCD initialization into subroutine
     // activate LCD module
@@ -220,14 +245,14 @@ void setup()
     lcd.setBacklightPin(3,POSITIVE);
     lcd.setBacklight(HIGH);
     lcd.clear();
-    lcd.createChar(0, pBar);
+    lcd.createChar(0, lcdProgressBarG);
 
-    FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, lNumG);
+    FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, ledNumG);
 
     Serial.begin(9600);
 
     // FIXME: eepROM initializaiton in it's own subroutine
-    uint8_t eepromLastMode = readEEProm(LAST_MODE);
+    uint8_t eepromLastMode = readEEProm(savedLastModeG);
     if (eepromLastMode != 255)
     {
         Serial.println(" Some mode was stored.");
@@ -290,7 +315,7 @@ void printModeInfo(int mode)
             lcd.print(modeName);
         }
         lcd.setCursor (0,1);        // go to start of 2nd line
-        if (bListening)
+        if (mListeningG)
             lcd.print(F("Mic on "));
         else
             lcd.print(F("Mic off"));
@@ -298,7 +323,7 @@ void printModeInfo(int mode)
 
         Serial.print("New mode:");
         Serial.println(lastMode);
-        writeEEProm(LAST_MODE, lastMode);
+        writeEEProm(savedLastModeG, lastMode);
     }
 
 
@@ -307,7 +332,7 @@ void printModeInfo(int mode)
 
 void showModeIsListening(bool listening)
 {
-    bListening = listening;
+    mListeningG = listening;
 }
 
 // FIXME: this is a utility mode called by several methods
@@ -383,7 +408,7 @@ int dimDisplayIfControlsNotRecentlyTouched()
     if (lastMode != -1 && lastMode == mode && secondsPast > 5 && !dimmed)
     {  // if we have not just turned on, and our mode has not changed, and we are not dimmed then dim
         dimmed = true;
-        analogWrite(backlight_pin10,LCD_Dim_Brightness);  // PWM values from 0 to 255 (0% – 100%
+        analogWrite(LCD_BACKLIGHT_PIN,lcdBrightnessDimG);  // PWM values from 0 to 255 (0% – 100%
     }
     else // otherwise if we are dimmed, mode has changed or pot has changed then wake up
         if( dimmed && (lastMode != mode  ||
@@ -394,7 +419,7 @@ int dimDisplayIfControlsNotRecentlyTouched()
                 mode = decrementButtonValue();
             }
             dimmed = false;
-            analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100%
+            analogWrite(LCD_BACKLIGHT_PIN,lcdBrightnessOnG);  // PWM values from 0 to 255 (0% – 100%
             lastMode = mode;
             lastPot = pot;
             millisSinceLastUpate = millis();
@@ -685,7 +710,7 @@ void writeEEProm(uint8_t location, uint8_t value )
 
 void dark()
 {
-    for(uint8_t i = 0; i < lNumG; i++)
+    for(uint8_t i = 0; i < ledNumG; i++)
     {
         ledsG[i] = CHSV(0, 0, 0);
     }
@@ -708,7 +733,7 @@ void modeInit(uint8_t m)
     // color/volume history
     else if(m == 6)
     {
-        for(uint8_t i = 0; i < lNumG; i++)
+        for(uint8_t i = 0; i < ledNumG; i++)
         {
             savedParamsG[i] = 0;
         }
@@ -719,7 +744,7 @@ void modeInit(uint8_t m)
         // 85 / 255 == 120 / 360
         // 85 in 255 value hue value space
         // is the same as 120 in 360 degree hue (color) wheel
-        float ratio = (float) 85 / (float) lNumG;
+        float ratio = (float) 85 / (float) ledNumG;
         if(ratio < 1.0)
         {
             vuUnderSavedParams(ratio);
@@ -776,16 +801,16 @@ void Fire2012(uint8_t fs)
     uint8_t fireSparking = fs;
 
     // Array of temperature readings at each simulation cell
-    static byte heat[lNumG];
+    static byte heat[ledNumG];
     bool gReverseDirection = false;
 
     // Step 1.  Cool down every cell a little
-    for( uint8_t i = 0; i < lNumG; i++) {
-        heat[i] = qsub8( heat[i],  random8(0, ((fireCooling * 10) / lNumG) + 2));
+    for( uint8_t i = 0; i < ledNumG; i++) {
+        heat[i] = qsub8( heat[i],  random8(0, ((fireCooling * 10) / ledNumG) + 2));
     }
 
     // Step 2.  Heat from each cell drifts 'up' and diffuses a little
-    for( uint8_t k= lNumG - 1; k >= 2; k--) {
+    for( uint8_t k= ledNumG - 1; k >= 2; k--) {
         heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
     }
 
@@ -796,11 +821,11 @@ void Fire2012(uint8_t fs)
     }
 
     // Step 4.  Map from heat cells to LED colors
-    for( uint8_t j = 0; j < lNumG; j++) {
+    for( uint8_t j = 0; j < ledNumG; j++) {
         CRGB color = HeatColor( heat[j]);
         uint8_t pixelnumber;
         if( gReverseDirection ) {
-            pixelnumber = (lNumG - 1) - j;
+            pixelnumber = (ledNumG - 1) - j;
         } else {
             pixelnumber = j;
         }
@@ -896,13 +921,13 @@ unsigned long computeNextIteration(float p)
     return nextIteration;
 }
 
-// arg r is 85 / lNumG
+// arg r is 85 / ledNumG
 void vuUnderSavedParams(float r)
 {
     float rawMultiplier = 1.0 / r;
     int truncatedMultiplier = (int) rawMultiplier;
     int truncatedTotal = 85 * truncatedMultiplier;
-    int remainder = lNumG - truncatedTotal;
+    int remainder = ledNumG - truncatedTotal;
     uint8_t currentHue = 0;
     uint8_t truncatedCount = 0;
     bool remainderAdded = false;
@@ -911,7 +936,7 @@ void vuUnderSavedParams(float r)
     // and go toward green (85)
     // so we populate array "backwards"
     // since 0 is value at end
-    for(int i = lNumG - 1; i > -1; i--)
+    for(int i = ledNumG - 1; i > -1; i--)
     {
         savedParamsG[i] = currentHue;
         truncatedCount++;
@@ -941,14 +966,14 @@ void vuUnderSavedParams(float r)
     }
 }
 
-// arg r is 85 / lNumG
+// arg r is 85 / ledNumG
 void vuOverSavedParams(float r)
 {
     int hueAddend = (int) r;
-    int truncatedTotal = hueAddend * lNumG;
+    int truncatedTotal = hueAddend * ledNumG;
     int remainder = 85 - truncatedTotal;
     uint8_t currentHue = 0;
-    for(int i = lNumG - 1; i > -1; i--)
+    for(int i = ledNumG - 1; i > -1; i--)
     {
         savedParamsG[i] = currentHue;
         currentHue += hueAddend;
@@ -974,9 +999,9 @@ void mode0(float p)
     float rawHue = 255.0 * p;
     float flippedHue = 255.0 - rawHue;
     uint8_t hue = round(flippedHue);
-    for(uint8_t i = 0; i < lNumG; i++)
+    for(uint8_t i = 0; i < ledNumG; i++)
     {
-        ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
+        ledsG[i] = CHSV(hue, ledDefaultSaturationG, ledDefaultValueG);
     }
     FastLED.show();
 }
@@ -989,9 +1014,10 @@ void mode1(float p)
     alwaysUpdateG = true;
 
     // divide color space among given LEDs
-    // this code will only work with lNumG < 255
-    // since lNumG is uint8_t this is not a realistic worry ...
-    float fHueStep = 255.0 / (float) lNumG;
+    // this code will only work with ledNumG < 255
+    // since ledNumG is uint8_t this is not a realistic worry ...
+    // FIXME: write needed code so ledNumG can be any value
+    float fHueStep = 255.0 / (float) ledNumG;
     if(fHueStep < 1.0)
     {
         fHueStep = 1.0;
@@ -1003,11 +1029,11 @@ void mode1(float p)
         unsigned long delayMillis = computeNextIteration(p);
         savedTargetMillisG = currentMillis + delayMillis;
         uint8_t hue = savedHueG;
-        for(uint8_t i = 0; i < lNumG; i++)
+        for(uint8_t i = 0; i < ledNumG; i++)
         {
             uint8_t tmp = hue + hueStep;
             hue = tmp % 255;
-            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
+            ledsG[i] = CHSV(hue, ledDefaultSaturationG, ledDefaultValueG);
             if(i == 0)
             {
                 savedHueG = hue;
@@ -1030,9 +1056,9 @@ void mode2(float p)
         int tmp = savedHueG + 1;
         uint8_t hue = tmp % 255;
         savedHueG = hue;
-        for(uint8_t i = 0; i < lNumG; i++)
+        for(uint8_t i = 0; i < ledNumG; i++)
         {
-            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
+            ledsG[i] = CHSV(hue, ledDefaultSaturationG, ledDefaultValueG);
         }
         FastLED.show();
     }
@@ -1046,7 +1072,7 @@ void mode3(float p)
 {
     alwaysUpdateG = true;
 
-    uint8_t lastIndex = lNumG - 1;
+    uint8_t lastIndex = ledNumG - 1;
     unsigned long currentMillis = millis();
     if(currentMillis > savedTargetMillisG)
     {
@@ -1055,7 +1081,7 @@ void mode3(float p)
         uint8_t tmp = savedHueG + 1;
         uint8_t hue = tmp % 255;
         tmp = savedLedG + 1;
-        uint8_t onLed = tmp % lNumG;
+        uint8_t onLed = tmp % ledNumG;
         uint8_t offLed = onLed - 1;
         if(onLed == 0)
         {
@@ -1063,7 +1089,7 @@ void mode3(float p)
         }
         savedLedG = onLed;
         savedHueG = hue;
-        ledsG[onLed] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
+        ledsG[onLed] = CHSV(hue, ledDefaultSaturationG, ledDefaultValueG);
         ledsG[offLed] = CHSV(hue, 0, 0);
         FastLED.show();
     }
@@ -1084,7 +1110,7 @@ void mode4(float p)
     uint8_t sparking = 25 + temp;
 
     uint8_t framesPerSecond = 60;
-    FastLED.setBrightness(lDefaultValueG);
+    FastLED.setBrightness(ledDefaultValueG);
     Fire2012(sparking); // run simulation frame
     FastLED.show(); // display this frame
     FastLED.delay(1000 / framesPerSecond);
@@ -1123,9 +1149,9 @@ void mode5(float p)
     // only update LEDS if there is a change
     if(savedHueG != hue)
     {
-        for(uint8_t i = 0; i < lNumG; i++)
+        for(uint8_t i = 0; i < ledNumG; i++)
         {
-            ledsG[i] = CHSV(hue, lDefaultSaturationG, lDefaultValueG);
+            ledsG[i] = CHSV(hue, ledDefaultSaturationG, ledDefaultValueG);
         }
         FastLED.show();
 
@@ -1173,7 +1199,7 @@ void mode6(float p)
         uint8_t j;
         // i is int not uint8_t because
         //    negative number comparison needs to work
-        for(int i = lNumG - 2; i > -1; i--)
+        for(int i = ledNumG - 2; i > -1; i--)
         {
             j = i + 1;
             savedParamsG[j] = savedParamsG[i];
@@ -1181,11 +1207,11 @@ void mode6(float p)
         savedParamsG[0] = hue;
 
         // display
-        for(uint8_t i = 0; i < lNumG; i++)
+        for(uint8_t i = 0; i < ledNumG; i++)
         {
             if(savedParamsG[i] > 0)
             {
-                ledsG[i] = CHSV(savedParamsG[i], lDefaultSaturationG, lDefaultValueG);
+                ledsG[i] = CHSV(savedParamsG[i], ledDefaultSaturationG, ledDefaultValueG);
             }
             // blanks
             else
@@ -1223,8 +1249,8 @@ void mode7(float p)
     }
     else
     {
-        // volts scaled to lNumG
-        float numerator = cookedVolts * (float) lNumG;
+        // volts scaled to ledNumG
+        float numerator = cookedVolts * (float) ledNumG;
         float rawSeparator = numerator / mMaxVoltsG;
         int separatorIndex = round(rawSeparator);
 
@@ -1233,7 +1259,7 @@ void mode7(float p)
 
         // only LEDs below separatorIndex are lit
         // others are dark
-        for(uint8_t i = 0; i < lNumG; i++)
+        for(uint8_t i = 0; i < ledNumG; i++)
         {
             if(i > separatorIndex)
             {
@@ -1241,7 +1267,7 @@ void mode7(float p)
             }
             else
             {
-                ledsG[i] = CHSV(savedParamsG[i], lDefaultSaturationG, lDefaultValueG);
+                ledsG[i] = CHSV(savedParamsG[i], ledDefaultSaturationG, ledDefaultValueG);
             }
         }
         FastLED.show();
