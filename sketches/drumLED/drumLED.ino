@@ -40,19 +40,19 @@
 #include <EEPROM.h>
 
 
-// FIXME: document all defines
+// ========
+//  DEFINES
+// ========
+
+
 /*
-
-   DEFINES
-   =======
-
-
- * version
+ * _VERSION_
  * release version of code
-
  */
 
 #define _VERSION_ "2.1"
+
+// FIXME: document all defines
 
 // set to non-zero for serial output
 #define _DEBUG_ 0
@@ -91,21 +91,29 @@
 // first mode
 #define INIT_MODE 0
 
+// max mode number
+#define MAX_MODE 7
 
-// =======
-// GLOBALS
-// =======
+
+// ================
+// GLOBAL VARIABLES
+// ================
 
 // button
 // ------
+
+// keep track of button state
 bool bPressedG = false;
 
 // this is initial mode
-int8_t bModeG = -1;
-int8_t firstMode = -1;
+int8_t bModeG = INIT_MODE;
+
+// to cycle through modes
+int8_t bModulusG = MAX_MODE + 1;
 
 // microphone
 // ----------
+
 // this is changeable (can increase)
 // allows for more coverage of color spectrum
 float mMaxVoltsG = 0.6;
@@ -123,22 +131,33 @@ bool mListeningG = false;
 
 // potentiometer
 // -------------
+
+// top level of pot (can be changed)
 int pMaxPotLevelG = 672;
-short lastPotLevelReading = 0;
 
 // led
 // ---
+
+// number of LEDs in attached strip
 const uint8_t ledNumG = LED_NUM;
-const uint8_t ledDefaultValueG = DEFAULT_VALUE;
-const uint8_t ledDefaultSaturationG = DEFAULT_SATURATION;
+
+// default HSV value (brightness), max 255
+uint8_t ledDefaultValueG = DEFAULT_VALUE;
+
+// default HSV saturation, max 255
+uint8_t ledDefaultSaturationG = DEFAULT_SATURATION;
 
 // fastLED data structure
 CRGB ledsG[ledNumG];
 
 // lcd
 // ---
-const uint8_t lcdBrightnessOnG = LCD_BRIGHTNESS_ON;
-const uint8_t lcdBrightnessDimG = LCD_BRIGHTNESS_DIM;
+
+// brightness setting when on
+uint8_t lcdBrightnessOnG = LCD_BRIGHTNESS_ON;
+
+// brightness setting when dimmed
+uint8_t lcdBrightnessDimG = LCD_BRIGHTNESS_DIM;
 
 //progress bar character for brightness
 byte lcdProgressBarG[8] = {
@@ -155,32 +174,52 @@ byte lcdProgressBarG[8] = {
 // 0x27 is the I2C bus address for an unmodified backpack
 LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7);
 
+// storage space
+const int eMaxAddressG = EEPROM.length();
 
 // history
 // -------
+
+// whether to update regardless of pot change
 bool alwaysUpdateG = false;
+
+// current mode
 uint8_t savedModeG = INIT_MODE;
 
 // saved on scale from 0 to 1
 float savedPotG;
+
+// to allow for flexible mode timing
 unsigned long savedTargetMillisG = 0;
+
+// programatically hue manipulation
 uint8_t savedHueG = 0;
+
+// programatic manipulation of individual LEDs
 uint8_t savedLedG = 0;
+
+// programatically responding to audio changes
 unsigned long savedLastSampleMillisG;
+
+// multipurpose mode LED mirror
 uint8_t savedParamsG[ledNumG];
+
+// display
+static char modeNameG[17] = "";
+
+// how many of possible variables were stored
+int eMaxStoredG;
 
 // debugging
 // ---------
+
 // initialized from #define in setup()
 bool debugG = true;
 
-// FIXME: this belongs somewhere else
-static char modeName[17] = "";
 
-
-// =======
-// ARDUINO
-// =======
+// =====
+// SETUP
+// =====
 
 void setup()
 {
@@ -202,39 +241,50 @@ void setup()
     initLCD();
 }
 
-void loop()
-{
-    float pot = potentiometerScaled();
-    uint8_t mode = buttonGetValue();
-    bool updateMode = initLoop(mode, pot);
-    if(updateMode) {
-        if(debugG) {
-            Serial.print("Mode:");  // only print this when things change
-            Serial.println(mode);
-        }
-        modeSwitch(mode, pot);
-    }
-}
-
-// =====
-// SETUP
-// =====
-
+// 2: ledDefaultSaturationG = DEFAULT_SATURATION;
+// 3: lcdBrightnessOnG = LCD_BRIGHTNESS_ON;
+// 4: lcdBrightnessDimG = LCD_BRIGHTNESS_DIM;
+// 5: debugG
 void initEEPROM() {
-    uint8_t eepromLastMode = readEEProm(savedModeG);
-    if(eepromLastMode != 255) {
-        firstMode = eepromLastMode;
-        if(debugG) {
-            Serial.println(" Some mode was stored.");
-            Serial.println(eepromLastMode);
+    int addr = 0;
+    uint8_t tmpUint8;
+    // 0: bModeG
+    EEPROM.get(addr, tmpUint8);
+    if(tmpUint8) {
+        bModeG = tmpUint8;
+        if(debugG){
+            Serial.println("EEPROM: bModeG retrieved");
         }
     }
-    else if(debugG){
-        Serial.println(" No mode was stored yet.");
+    EEPROM.put(addr, bModeG);
+    if(debugG){
+        Serial.println("EEPROM: bModeG stored");
+    }
+    addr += sizeof(uint8_t);
+    if(addr >= eMaxAddressG) {
+        return eMaxStoredG;
+    }
+    eMaxStoredG = 0;
+    // 1: ledDefaultValueG = DEFAULT_VALUE;
+    tmpUint8 = 0;
+    EEPROM.get(addr, tmpUint8);
+    if(tmpUint8) {
+        ledDefaultValueG = tmpUint8;
+        if(debugG){
+            Serial.println("EEPROM: ledDefaultValueG retrieved");
+        }
+    }
+    EEPROM.put(addr, ledDefaultValueG);
+    if(debugG){
+        Serial.println("EEPROM: bModeG stored");
+    }
+    addr += sizeof(uint8_t);
+    if(addr >= eMaxAddressG) {
+        return eMaxStoredG;
     }
 
-    // FIXME: not sure if this should be here (initEEPROM) or not
-    strcpy(modeName, "");
+    // FIXME: evaluate and continue
+    return eMaxStoredG;
 }
 
 void initLCD() {
@@ -252,6 +302,68 @@ void initLCD() {
 // ====
 // LOOP
 // ====
+
+void loop()
+{
+    uint8_t mode = buttonGetValue();
+    float pot = potentiometerScaled();
+    bool updateMode = initLoop(mode, pot);
+    if(updateMode) {
+        if(debugG) {
+            Serial.print("Mode:");  // only print this when things change
+            Serial.println(mode);
+        }
+        modeSwitch(mode, pot);
+    }
+}
+
+int buttonGetValue()
+{
+    bool pressed = buttonWasPressed();
+    if(pressed)
+    {
+
+        uint8_t currentButtonValue = bModeG;
+        currentButtonValue += 1;
+        bModeG = currentButtonValue % bModulusG;
+    }
+    return bModeG;
+}
+
+bool buttonWasPressed()
+{
+    bool pressedState = false;
+    uint8_t currentState = digitalRead(BUTTON_PIN);
+    if(bPressedG && currentState == 0)
+    {
+        bPressedG = false;
+        pressedState = true;
+    }
+    else if(!bPressedG && currentState == 1)
+    {
+        bPressedG = true;
+    }
+    return pressedState;
+}
+// scaled from 0 - 1
+float potentiometerScaled()
+{
+    int potLevel = analogRead(POT_PIN);
+
+    if(potLevel > pMaxPotLevelG)
+    {
+        pMaxPotLevelG = potLevel + 1;
+    }
+    float ratio = (float) potLevel / (float) pMaxPotLevelG;
+
+    // do not return 0
+    // multiplying by 0 will break things
+    if(ratio < 0.01)
+    {
+        ratio = 0.01;
+    }
+    return ratio;
+}
 
 bool initLoop(uint8_t md, float pt) {
     bool updateMode = false;
@@ -382,7 +494,7 @@ void modeSwitch(uint8_t md, float pt)
             vuLevel=map(readPeakToPeak()*1024, 0, 2.2*1024, 0, 17);
             LCD_BarGraph(vuLevel);
             break;
-        // FIXME: get rid of this
+            // FIXME: get rid of this
         case -1:
         case 255:  // this is -1... just fall out of case statement
             break;
@@ -419,12 +531,12 @@ void modeSwitch(uint8_t md, float pt)
 
 void setModeName(const char *string)
 {
-    strcpy(modeName, string);
+    strcpy(modeNameG, string);
 }
 
 void printModeInfo(const char *string)
 {
-    strcpy(modeName, string);
+    strcpy(modeNameG, string);
     printModeInfo(0);
 }
 
@@ -452,13 +564,13 @@ void printModeInfo(int mode)
         lcd.clear();
         lcd.home (); // set cursor to 0,0
         lcd.setCursor (0,0);        // go to start of 2nd line
-        if (!modeName[0])
+        if (!modeNameG[0])
         {
             lcd.print(F("Mode :"));  lcd.print(mode);
         }
         else
         {
-            lcd.print(modeName);
+            lcd.print(modeNameG);
         }
         lcd.setCursor (0,1);        // go to start of 2nd line
         if (mListeningG)
@@ -633,40 +745,6 @@ int decrementButtonValue()
     return bModeG;
 }
 
-int buttonGetValue()
-{
-    bool pressed = buttonWasPressed();
-    if(pressed)
-    {
-        if (firstMode == -1)
-        {  // there was no first mode in eeprom memory.  this might be first time turned on.
-            uint8_t currentButtonValue = bModeG;
-            currentButtonValue += 1;
-            bModeG = currentButtonValue % 8;
-        } else
-        {  // after turning on and firstMode read from memory is non-1 means that we have a mode to restore to.
-            bModeG= firstMode;
-            firstMode=-1;
-        }
-    }
-    return bModeG;
-}
-
-bool buttonWasPressed()
-{
-    bool pressedState = false;
-    uint8_t currentState = digitalRead(BUTTON_PIN);
-    if(bPressedG && currentState == 0)
-    {
-        bPressedG = false;
-        pressedState = true;
-    }
-    else if(!bPressedG && currentState == 1)
-    {
-        bPressedG = true;
-    }
-    return pressedState;
-}
 
 bool isButtonPressed()
 {
@@ -721,27 +799,6 @@ float readPeakToPeak()
 
 // potentiometer
 // -------------
-// scaled from 0 - 1
-float potentiometerScaled()
-{
-    lastPotLevelReading = analogRead(POT_PIN);
-
-    int potLevel = lastPotLevelReading;
-
-    if(potLevel > pMaxPotLevelG)
-    {
-        pMaxPotLevelG = potLevel + 1;
-    }
-    float ratio = (float) potLevel / (float) pMaxPotLevelG;
-
-    // do not return 0
-    // multiplying by 0 will break things
-    if(ratio < 0.01)
-    {
-        ratio = 0.01;
-    }
-    return ratio;
-}
 
 
 // eeprom
