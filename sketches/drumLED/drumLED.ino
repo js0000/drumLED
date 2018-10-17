@@ -36,8 +36,8 @@
 #include "FastLED.h"
 #include <Wire.h>
 //#include <LCD.h>
-//#include <LiquidCrystal_I2C.h>
-#include <LiquidCrystal.h>
+//#include <LiquidCrystal.h>
+#include <LiquidCrystal_I2C.h>
 #include <EEPROM.h>
 
 
@@ -160,21 +160,23 @@ uint8_t lcdBrightnessOnG = LCD_BRIGHTNESS_ON;
 // brightness setting when dimmed
 uint8_t lcdBrightnessDimG = LCD_BRIGHTNESS_DIM;
 
+/*
 //progress bar character for brightness
 byte lcdProgressBarG[8] = {
-    B11111,
-    B11111,
-    B11111,
-    B11111,
-    B11111,
-    B11111,
-    B11111,
+B11111,
+B11111,
+B11111,
+B11111,
+B11111,
+B11111,
+B11111,
 };
+ */
 
 // LCD data structure
 // 0x27 is the I2C bus address for an unmodified backpack
-//LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7);
-LiquidCrystal  lcd(2,1,0,4,5,6,7);
+//LiquidCrystal  lcd(2,1,0,4,5,6,7);
+LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7);
 
 // history
 // -------
@@ -220,8 +222,7 @@ bool debugG = true;
 // SETUP
 // =====
 
-void setup()
-{
+void setup() {
     // set debugging global var
     if(_DEBUG_ == 0) {
         debugG = false;
@@ -236,20 +237,40 @@ void setup()
     pinMode(LCD_BACKLIGHT_PIN, OUTPUT);
 
     FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, ledNumG);
-    lcd.begin (16,2); // for 16 x 2 LCD module
     initEEPROM();
+    initLCD();
+    if(debugG) {
+        Serial.println("init() completed");
+    }
 }
 
 void initEEPROM() {
-    EEPROM.write(0, bModeG);
-    EEPROM.write(1, ledDefaultValueG);
-    EEPROM.write(2, ledDefaultSaturationG);
-    EEPROM.write(3, lcdBrightnessOnG);
-    EEPROM.write(4, lcdBrightnessDimG);
-    EEPROM.write(5, debugG);
-
+    // tmp = updateNeeded
+    int tmp = EEPROM.read(0);
+    if(tmp) {
+        // reset updateNeeded value
+        EEPROM.write(0, 0);
+        // save current values
+        EEPROM.write(1, ledDefaultValueG);
+        EEPROM.write(2, ledDefaultSaturationG);
+        EEPROM.write(3, lcdBrightnessOnG);
+        EEPROM.write(4, lcdBrightnessDimG);
+        EEPROM.write(5, debugG);
+        if(debugG) {
+            Serial.println("all values written to EEPROM");
+        }
+    }
+    else {
+        ledDefaultValueG = EEPROM.read(1);
+        ledDefaultSaturationG = EEPROM.read(2);
+        lcdBrightnessOnG = EEPROM.read(3);
+        lcdBrightnessDimG = EEPROM.read(4);
+        debugG = EEPROM.read(5);
+        if(debugG) {
+            Serial.println("all values read from EEPROM");
+        }
+    }
     if(debugG) {
-        int tmp;
         for(int i = 0; i < 6; i++) {
             tmp = EEPROM.read(i);
             Serial.print(i);
@@ -259,42 +280,54 @@ void initEEPROM() {
     }
 }
 
-/*
 void initLCD() {
-    // activate LCD module
-    analogWrite(LCD_BACKLIGHT_PIN,lcdBrightnessOnG);
-    lcd.begin (16,2); // for 16 x 2 LCD module
-    lcd.setBacklightPin(3,POSITIVE);
-    lcd.setBacklight(HIGH);
-    lcd.clear();
-    lcd.createChar(0, lcdProgressBarG);
+
+    lcd.init();
+
+    // from example code
+    // Print a message to the LCD.
+    lcd.backlight();
+    lcd.setCursor(3,0);
+    lcd.print("Hello, world!");
+    lcd.setCursor(2,1);
+    lcd.print("Ywrobot Arduino!");
+    lcd.setCursor(0,2);
+    lcd.print("Arduino LCM IIC 2004");
+    lcd.setCursor(2,3);
+    lcd.print("Power By Ec-yuan!");
+
+    /*
+     * from dom
+     analogWrite(LCD_BACKLIGHT_PIN,lcdBrightnessOnG);
+     lcd.begin (16,2); // for 16 x 2 LCD module
+     lcd.setBacklightPin(3,POSITIVE);
+     lcd.setBacklight(HIGH);
+     lcd.clear();
+     lcd.createChar(0, lcdProgressBarG);
+     */
 }
-*/
+
 
 // ====
 // LOOP
 // ====
 
-void loop()
-{
+void loop() {
     uint8_t mode = buttonGetValue();
     float pot = potentiometerScaled();
     bool updateMode = initLoop(mode, pot);
     if(updateMode) {
+        modeSwitch(mode, pot);
         if(debugG) {
             Serial.print("Mode:");  // only print this when things change
             Serial.println(mode);
         }
-        modeSwitch(mode, pot);
     }
 }
 
-int buttonGetValue()
-{
+int buttonGetValue() {
     bool pressed = buttonWasPressed();
-    if(pressed)
-    {
-
+    if(pressed) {
         uint8_t currentButtonValue = bModeG;
         currentButtonValue += 1;
         bModeG = currentButtonValue % bModulusG;
@@ -302,36 +335,30 @@ int buttonGetValue()
     return bModeG;
 }
 
-bool buttonWasPressed()
-{
+bool buttonWasPressed() {
     bool pressedState = false;
     uint8_t currentState = digitalRead(BUTTON_PIN);
-    if(bPressedG && currentState == 0)
-    {
+    if(bPressedG && currentState == 0) {
         bPressedG = false;
         pressedState = true;
     }
-    else if(!bPressedG && currentState == 1)
-    {
+    else if(!bPressedG && currentState == 1) {
         bPressedG = true;
     }
     return pressedState;
 }
-// scaled from 0 - 1
-float potentiometerScaled()
-{
-    int potLevel = analogRead(POT_PIN);
 
-    if(potLevel > pMaxPotLevelG)
-    {
+// scaled from 0 - 1
+float potentiometerScaled() {
+    int potLevel = analogRead(POT_PIN);
+    if(potLevel > pMaxPotLevelG) {
         pMaxPotLevelG = potLevel + 1;
     }
     float ratio = (float) potLevel / (float) pMaxPotLevelG;
 
     // do not return 0
     // multiplying by 0 will break things
-    if(ratio < 0.01)
-    {
+    if(ratio < 0.01) {
         ratio = 0.01;
     }
     return ratio;
@@ -339,58 +366,62 @@ float potentiometerScaled()
 
 bool initLoop(uint8_t md, float pt) {
     bool updateMode = false;
-    if(md != savedModeG)
-    {
+    if(md != savedModeG) {
         updateMode = true;
+        savedModeG = md;
         // only init on mode change
         initMode(md, pt);
+        if(debugG) {
+            Serial.print("mode not matching");
+        }
     }
-    else if(pt != savedPotG)
-    {
+    else if(pt != savedPotG) {
         updateMode = true;
+        savedPotG = p;
+        if(debugG) {
+            Serial.print("pot not matching");
+        }
     }
-    else if(alwaysUpdateG)
-    {
+    else if(alwaysUpdateG) {
         updateMode = true;
+        if(debugG) {
+            Serial.print("alwaysUpdateG true");
+        }
     }
 
+    if(debugG){
+        Serial.println(": initLoop()");
+    }
     return updateMode;
 }
 
-void initMode(uint8_t m, float p)
-{
+void initMode(uint8_t m, float p) {
     // initialize variables
+    // FIXME: should any of these go in EEPROM
     savedHueG = 0;
     savedLedG = 0;
-    savedPotG = p;
 
     // fire
-    if(m == 4)
-    {
+    if(m == 4) {
         // Add entropy to random number generator; we use a lot of it.
         random16_add_entropy(random());
     }
     // color/volume history
-    else if(m == 6)
-    {
-        for(uint8_t i = 0; i < ledNumG; i++)
-        {
+    else if(m == 6) {
+        for(uint8_t i = 0; i < ledNumG; i++) {
             savedParamsG[i] = 0;
         }
     }
     // vu
-    else if(m == 7)
-    {
+    else if(m == 7) {
         // 85 / 255 == 120 / 360
         // 85 in 255 value hue value space
         // is the same as 120 in 360 degree hue (color) wheel
         float ratio = (float) 85 / (float) ledNumG;
-        if(ratio < 1.0)
-        {
+        if(ratio < 1.0) {
             vuUnderSavedParams(ratio);
         }
-        else
-        {
+        else {
             vuOverSavedParams(ratio);
         }
     }
@@ -400,8 +431,7 @@ void initMode(uint8_t m, float p)
     delay(MODE_CHANGE_DELAY);
 }
 
-void modeSwitch(uint8_t md, float pt)
-{
+void modeSwitch(uint8_t md, float pt) {
 
     /*
      * this is some LCD initialization code
@@ -419,62 +449,42 @@ void modeSwitch(uint8_t md, float pt)
     // FIXME: this is for mode7, should be put elsewhere
     int vuLevel = 0;
 
-    savedModeG = md;
-    savedPotG = pt;
-    setModeName("");
     switch(md)
     {
         case 0:
             mode0(pt);
-            setModeName("Color sweep");
-            showModeIsListening(false);
+            /*
+             * these are in mode now
+             setModeName("Color sweep");
+             showModeIsListening(false);
+             */
             break;
         case 1:
             mode1(pt);
-            setModeName("Rainbow cycle");
-            showModeIsListening(false);
             break;
         case 2:
-            setModeName("Slow Hue change");
             mode2(pt);
-            showModeIsListening(false);
             break;
         case 3:
-            setModeName("Chasing dot");
             mode3(pt);
-            showModeIsListening(false);
             break;
         case 4:
-            setModeName("Fire!!");
-            showModeIsListening(false);
             mode4(pt);
             break;
         case 5:
-            setModeName("Pulsed light");
-            showModeIsListening(true);
             mode5(pt);
             break;
         case 6:
             mode6(pt);
-            setModeName("Chased light");
-            showModeIsListening(true);
             break;
         case 7:
-            setModeName("VU Meter");
-            showModeIsListening(true);
             mode7(pt);
             vuLevel=map(readPeakToPeak()*1024, 0, 2.2*1024, 0, 17);
             //LCD_BarGraph(vuLevel);
             break;
-            // FIXME: get rid of this
-        case -1:
-        case 255:  // this is -1... just fall out of case statement
-            break;
         default:
             modeFail(md);
     }
-    printModeInfo(md);
-
 }
 
 // FIXME: start external library functions
@@ -505,7 +515,7 @@ void setModeName(const char *string)
 {
     strcpy(modeNameG, string);
 }
-
+/*
 void printModeInfo(const char *string)
 {
     strcpy(modeNameG, string);
@@ -559,6 +569,7 @@ void printModeInfo(int mode)
 
 
 }
+*/
 
 void showModeIsListening(bool listening)
 {
