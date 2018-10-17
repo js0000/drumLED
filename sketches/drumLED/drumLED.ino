@@ -35,8 +35,9 @@
 #include <avr/pgmspace.h>
 #include "FastLED.h"
 #include <Wire.h>
-#include <LCD.h>
-#include <LiquidCrystal_I2C.h>
+//#include <LCD.h>
+//#include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal.h>
 #include <EEPROM.h>
 
 
@@ -55,7 +56,7 @@
 // FIXME: document all defines
 
 // set to non-zero for serial output
-#define _DEBUG_ 0
+#define _DEBUG_ 1
 
 // hardware config
 #define BUTTON_PIN 4
@@ -172,10 +173,8 @@ byte lcdProgressBarG[8] = {
 
 // LCD data structure
 // 0x27 is the I2C bus address for an unmodified backpack
-LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7);
-
-// storage space
-const int eMaxAddressG = EEPROM.length();
+//LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7);
+LiquidCrystal  lcd(2,1,0,4,5,6,7);
 
 // history
 // -------
@@ -237,67 +236,40 @@ void setup()
     pinMode(LCD_BACKLIGHT_PIN, OUTPUT);
 
     FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, ledNumG);
+    lcd.begin (16,2); // for 16 x 2 LCD module
     initEEPROM();
-    initLCD();
 }
 
-// 2: ledDefaultSaturationG = DEFAULT_SATURATION;
-// 3: lcdBrightnessOnG = LCD_BRIGHTNESS_ON;
-// 4: lcdBrightnessDimG = LCD_BRIGHTNESS_DIM;
-// 5: debugG
 void initEEPROM() {
-    int addr = 0;
-    uint8_t tmpUint8;
-    // 0: bModeG
-    EEPROM.get(addr, tmpUint8);
-    if(tmpUint8) {
-        bModeG = tmpUint8;
-        if(debugG){
-            Serial.println("EEPROM: bModeG retrieved");
-        }
-    }
-    EEPROM.put(addr, bModeG);
-    if(debugG){
-        Serial.println("EEPROM: bModeG stored");
-    }
-    addr += sizeof(uint8_t);
-    if(addr >= eMaxAddressG) {
-        return eMaxStoredG;
-    }
-    eMaxStoredG = 0;
-    // 1: ledDefaultValueG = DEFAULT_VALUE;
-    tmpUint8 = 0;
-    EEPROM.get(addr, tmpUint8);
-    if(tmpUint8) {
-        ledDefaultValueG = tmpUint8;
-        if(debugG){
-            Serial.println("EEPROM: ledDefaultValueG retrieved");
-        }
-    }
-    EEPROM.put(addr, ledDefaultValueG);
-    if(debugG){
-        Serial.println("EEPROM: bModeG stored");
-    }
-    addr += sizeof(uint8_t);
-    if(addr >= eMaxAddressG) {
-        return eMaxStoredG;
-    }
+    EEPROM.write(0, bModeG);
+    EEPROM.write(1, ledDefaultValueG);
+    EEPROM.write(2, ledDefaultSaturationG);
+    EEPROM.write(3, lcdBrightnessOnG);
+    EEPROM.write(4, lcdBrightnessDimG);
+    EEPROM.write(5, debugG);
 
-    // FIXME: evaluate and continue
-    return eMaxStoredG;
+    if(debugG) {
+        int tmp;
+        for(int i = 0; i < 6; i++) {
+            tmp = EEPROM.read(i);
+            Serial.print(i);
+            Serial.print(". ");
+            Serial.println(tmp);
+        }
+    }
 }
 
+/*
 void initLCD() {
     // activate LCD module
     analogWrite(LCD_BACKLIGHT_PIN,lcdBrightnessOnG);
-
     lcd.begin (16,2); // for 16 x 2 LCD module
     lcd.setBacklightPin(3,POSITIVE);
     lcd.setBacklight(HIGH);
     lcd.clear();
     lcd.createChar(0, lcdProgressBarG);
 }
-
+*/
 
 // ====
 // LOOP
@@ -492,7 +464,7 @@ void modeSwitch(uint8_t md, float pt)
             showModeIsListening(true);
             mode7(pt);
             vuLevel=map(readPeakToPeak()*1024, 0, 2.2*1024, 0, 17);
-            LCD_BarGraph(vuLevel);
+            //LCD_BarGraph(vuLevel);
             break;
             // FIXME: get rid of this
         case -1:
@@ -1349,3 +1321,4 @@ void modeFail(uint8_t m)
     Serial.print(F("invalid mode passed in: "));
     Serial.println(m);
 }
+
