@@ -301,7 +301,7 @@ int dimDisplayIfControlsNotRecentlyTouched()
 
     if (isButtonPressed())  // we don't dim if the button is down
     {   millisSinceLastUpate = millis();
-        return;
+        return 0;
     }
     int secondsPast=(millis()-millisSinceLastUpate)/1000;
         
@@ -1214,5 +1214,3 @@ void writeEEProm(uint8_t location, uint8_t value )
 {
     EEPROM.write(location, value);
 }
-
-
