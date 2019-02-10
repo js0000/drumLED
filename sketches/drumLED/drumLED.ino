@@ -21,7 +21,7 @@
    s see misc/hardware.csv
 */
 
-#define _VERSION_ "18.04.0t"
+#define _VERSION_ "19.04.32"  // 19 uses rotary encoder
 #include <avr/pgmspace.h>
 #include <FastLED.h>
 #include <Wire.h>
@@ -34,17 +34,18 @@ LiquidCrystal_I2C  lcd(0x27,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for a
 // =======
 // =======
 
-#define MAXIMUM_MODES_AVAILABLE 9
+#define MAXIMUM_MODES_AVAILABLE 8
 #define BUTTON_PIN 4
-#define MIC_PIN A3
 #define POT_PIN A1
 
 #define TEENSY
 
 #ifdef TEENSY
+  #define MIC_PIN 20
   #define LED_PIN 17
-  #define LED_NUM 100
+  #define LED_NUM 148
 #else
+  #define MIC_PIN A3
   #define LED_PIN 3
   #define LED_NUM 148
 #endif
@@ -78,7 +79,6 @@ bool bPressedG = false;
 
 // this is initial mode
 int8_t bModeG = -1;
-int8_t firstMode = -1;
 
 // microphone
 // ----------
@@ -125,7 +125,7 @@ CRGB ledsG[lNumG];
 // history
 // -------
 bool alwaysUpdateG = false;
-uint8_t savedModeG = 0;
+uint8_t savedModeG = -1;
 
 // saved on scale from 0 to 1
 float savedPotG;
@@ -147,6 +147,27 @@ bool bListening = false;
 #define LCD_ON_Brightness 128
 #define LCD_Dim_Brightness 1
 
+
+// Rotary encoder
+int val;
+volatile int encoder0Pos = 0;
+int rotAPinLast = LOW;
+int n = LOW;
+// Rotary encoder push button pin, active low
+static const int pushPin = 16;
+// Rotary encoder phase A pin
+static const int rotBPin = 12;
+// Rotary encoder phase B pin
+static const int rotAPin = 14;
+ #define DEMO 1
+ // Rotary encoder variables, used by interrupt routines
+volatile int rotState = 0;
+volatile int rotAval = 1;
+volatile int rotBval = 1;
+//volatile int rotAcc = 0;
+volatile int rotAccumulator = 0;
+
+
  
 // =======
 // ARDUINO
@@ -162,12 +183,12 @@ void setup()
     analogWrite(backlight_pin10,LCD_ON_Brightness);  // PWM values from 0 to 255 (0% – 100% 
 
 
-  // activate LCD module
-  lcd.begin (16,2); // for 16 x 2 LCD module
-  lcd.setBacklightPin(3,POSITIVE);
-  lcd.setBacklight(HIGH);
-  lcd.clear();
-  lcd.createChar(0, pBar);
+    // activate LCD module
+    lcd.begin (16,2); // for 16 x 2 LCD module
+    lcd.setBacklightPin(3,POSITIVE);
+    lcd.setBacklight(HIGH);
+    lcd.clear();
+    lcd.createChar(0, pBar);
     
     FastLED.addLeds<NEOPIXEL, LED_PIN>(ledsG, lNumG);
 
@@ -176,18 +197,268 @@ void setup()
     uint8_t eepromLastMode = readEEProm(LAST_MODE);
     if (eepromLastMode != 255)
     {
-      Serial.println(" Some mode was stored.");
+      Serial.print(" Some mode was stored: ");
       Serial.println(eepromLastMode);
-      firstMode = eepromLastMode;
-      
-    } else
+      bModeG = eepromLastMode;
+      SetRotAcc(bModeG);
+    }
+    else
     {
       Serial.println(" No mode was stored yet.");
+      bModeG= 0;
+      SetRotAcc(bModeG);     
     }
     strcpy(modeName, "");
 
+    // rotary encoder
+  pinMode (rotAPin, INPUT);
+  pinMode (rotBPin, INPUT);    
+  attachInterrupt(digitalPinToInterrupt(rotAPin), ISRrotAChange, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(rotBPin), ISRrotAChange, CHANGE);
 }
 
+void loop()
+{
+
+   static bool displayMode = true;  // we are either in display mode or settings mode
+
+   if (displayMode)
+   {
+    static int lastDisplayMode = RotaryGetValue();
+    if (RotaryGetValue()!= lastDisplayMode) {
+       Serial.print("Mode:");  // only print this when things change
+       Serial.println(RotaryGetValue());
+    }
+    LED_DisplayTheMode();
+    lastDisplayMode = RotaryGetValue(); 
+   }
+   else
+   {
+       lcd.setCursor (0,0);        // go to start of 2nd line
+       printModeInfo("Settings...");
+       lcd.setCursor (0,1);        // go to start of 2nd line
+       lcd.print(F("               "));
+
+   }
+
+   if (isModeButtonHeldDownFor3Secs())
+   {
+       Serial.print("buttonDownFor3Secs");  // only print this when things change
+
+      displayMode = !displayMode;
+      if (displayMode)
+         decrementButtonValue();
+   }
+   
+}
+
+
+
+// Interrupt routines
+void ISRrotAChange()
+{
+  int aSample = digitalRead(rotAPin);
+  int bSample = digitalRead(rotBPin);
+  
+  if(aSample) {
+    rotAval = 1;
+  } else {
+    rotAval = 0;
+  }
+  if(bSample) {
+    rotBval = 1;
+  } else {
+    rotBval = 0;
+  }
+
+  UpdateRot();
+
+}
+
+// Update rotary encoder accumulator. 
+// This function is called by the interrupt routine.
+#define _01 0x1
+#define _00 0
+#define _10 0x2
+#define _11 0x3
+void UpdateRot() 
+{ // finite state machine implemenation of rotary position.
+   static int state = 1;
+   static int lastState=0;
+    
+   int lastUnexpectedState;
+   
+   int reading = 0;
+   
+   reading = rotBval?2:0;
+   reading = reading + rotAval;
+
+   switch(state)
+   {
+    case 1: // _11 and CW was last settled state
+      if (reading == _01)
+      {
+//        Serial.println("Going to state 2");
+         state = 2;
+      }
+      else if (reading == _10)
+         state = 10;
+      else if (reading == _00)
+      {
+//         Serial.println("Going to state 3");
+         state = 3;
+      }else {
+//        printState(reading);
+        lastUnexpectedState = state;
+      }
+      break;
+    case 2: // _01
+      if (reading == _00)
+        state = 3;
+      else if (reading == _11)
+        state = 1;
+      else lastUnexpectedState = state;
+      break;
+    case 3:  // _00
+      if (reading == _01)
+      {
+ //       Serial.println("Going this way to 2");
+         state = 2;
+      } 
+      else if (reading == _10)
+         state = 4;
+      else if (reading == _11)
+        state = 1;
+      break;
+    case 4:
+      if (reading == _00)
+      {
+        state = 3;
+      }
+       else if (reading == _11)
+      {
+        //landed.  so increment accumulator
+          rotAccumulator++;
+          state = 1;
+      }
+      else lastUnexpectedState = state;
+      break;
+    case 5:  // _01  CCW last settled state
+      if (reading == _00)
+         state = 6;
+      else if (reading == _11)
+         state = 14;
+      else lastUnexpectedState = state;
+      break;
+
+    case 6:  // _00 
+      if (reading == _01)
+         state = 5;
+      else if (reading == _10)
+         state = 7;
+      else lastUnexpectedState = state;
+
+      break;
+
+    case 7:  // _10
+      if (reading == _00)
+         state = 6;
+      else if (reading == _11)
+         {  //landed.  so decrement accumulator
+            rotAccumulator ++;
+            state = 1;
+         }
+      else lastUnexpectedState = state;
+      break;
+         
+    case 10:  // _10
+      if (reading == _11)
+         state = 1;
+      else if (reading == _00)
+         state = 11;
+      else lastUnexpectedState = state;
+
+      break;
+         
+    case 11:  // _00
+      if (reading == _10)
+         state = 10;
+      else if (reading == _01)
+      {  //landed.  so decrement accumulator
+         rotAccumulator --;
+         state = 5;
+      }
+      else lastUnexpectedState = state;
+
+      break;
+
+    case 14:  // _11
+      if (reading == _01)
+         state = 5;
+      else if (reading == _10)
+         state = 15;
+      else lastUnexpectedState = state;
+
+      break;
+         
+    case 15:  // _10
+      if (reading == _00)
+         state = 16;
+      else if (reading == _11)
+         state = 14;
+      else lastUnexpectedState = state;
+
+      break;
+
+    case 16:  // _00
+      if (reading == _10)
+         state = 15;
+      else if (reading == _01)
+      {  //landed.  so decrement accumulator
+         rotAccumulator --;
+         state = 5;
+      }
+      else lastUnexpectedState = state;
+
+      break;
+
+  }
+
+  rotState = state;
+}
+
+
+
+void SetRotAcc(int rot)
+{
+  cli();
+  rotAccumulator = rot;
+  sei();
+
+}
+
+int GetRotAcc() 
+{
+  int rot;
+   
+  cli();
+  rot = rotAccumulator;
+  sei();
+  return rot;
+}
+
+int RotaryGetValue()
+{   
+  int i = GetRotAcc();
+
+  if (i < -1)
+    SetRotAcc(-1);
+
+  if (i >= MAXIMUM_MODES_AVAILABLE)
+    SetRotAcc(0);
+
+  return GetRotAcc();  
+}
 void setModeName(const char *string)
 {  
    strcpy(modeName, string);
@@ -201,7 +472,7 @@ void printModeInfo(const char *string)
 
 void printModeInfo(int mode)
 {
-  static int lastMode=mode;
+  static int lastMode=-1;
 
   
 //  Serial.print(F("printModeInfo ")); Serial.print(mode);
@@ -212,7 +483,8 @@ void printModeInfo(int mode)
     lcd.print(F("drumLED "));
     lcd.print(_VERSION_);
     lcd.setCursor (0,1);        // go to start of 2nd line
-    lcd.print(F("Push button"));
+    lcd.print(F("Rotate control"));
+    lastMode=-1;
     return;
   }
 
@@ -237,8 +509,8 @@ void printModeInfo(int mode)
      lcd.print(F("Mic off"));
    lastMode = mode;
 
-   Serial.print("New mode:");
-   Serial.println(lastMode);
+ //  Serial.print("New mode:");
+//   Serial.println(lastMode);
    writeEEProm(LAST_MODE, lastMode);
   } 
 
@@ -272,7 +544,6 @@ void LCD_BarGraph(short level)
 void loopBarGraph()
 {  //this is loop() function that just displays the bargraph controlled by the potentiometer on the lcd display
    int level = 0;         // progress bar
-   int i;
   // clears the LCD screen
    lcd.setCursor(0, 0);   
    lcd.write("This is a test");  
@@ -289,7 +560,7 @@ void loopBarGraph()
 int dimDisplayIfControlsNotRecentlyTouched()
 {
     
-    int mode = buttonGetValue();
+    int mode = RotaryGetValue();
     float pot = potentiometerScaled();
     
       // variables used to keep track time since any control was touched.
@@ -376,36 +647,43 @@ bool isModeButtonHeldDownFor3Secs()
 
 void LED_DisplayTheMode()
 {
+    
     int mode = dimDisplayIfControlsNotRecentlyTouched();
+    static int _saved_mode=-2;
+    
     float pot = potentiometerScaled();    
     int vuLevel = 0;
 
     if (mode ==-1)
     {
-      savedModeG = mode;
+      _saved_mode = mode;
       printModeInfo(-1);  // after turning on - we loop here until somoene presses the mode button
-      while (-1 == buttonGetValue());
+      while (-1 == RotaryGetValue());
     }
 
     
     boolean updateMode = false;
-    if(mode != savedModeG)
+    if(mode != _saved_mode)
     {
         updateMode = true;
         modeInit(mode);
+        _saved_mode = mode;
+        Serial.print("LED_DisplayTheMode ");
+        Serial.println(mode);
+        
     }
     else if(pot != savedPotG)
     {
         updateMode = true;
     }
-    else if(alwaysUpdateG)
+    else if(alwaysUpdateG || 1)
     {
         updateMode = true;
     }
 
     if(updateMode)
-    {
-        savedModeG = mode;
+    {      
+        _saved_mode = mode;
         savedPotG = pot;
         setModeName("");
         switch(mode)
@@ -458,7 +736,7 @@ void LED_DisplayTheMode()
                 mode8(pot);
                 vuLevel=map(readPeakToPeak()*1024, 0, 2.2*1024, 0, 17);
                 break;       
-            case MAXIMUM_MODES_AVAILABLE:     
+//            case MAXIMUM_MODES_AVAILABLE:     
             case -1:
             case 255:  // this is -1... just fall out of case statement
                 break;
@@ -468,39 +746,6 @@ void LED_DisplayTheMode()
         printModeInfo(mode);
     }
 
-}
-void loop()
-{
-
-   static bool displayMode = true;  // we are either in display mode or settings mode
-
-   if (displayMode)
-   {
-    static int lastDisplayMode = buttonGetValue();
-    if (buttonGetValue()!= lastDisplayMode) {
-       Serial.print("Mode:");  // only print this when things change
-       Serial.println(buttonGetValue());
-    }
-    lastDisplayMode = buttonGetValue(); 
-    LED_DisplayTheMode();
-   }
-   else
-   {
-       lcd.setCursor (0,0);        // go to start of 2nd line
-       printModeInfo("Settings...");
-       lcd.setCursor (0,1);        // go to start of 2nd line
-       lcd.print(F("               "));
-
-   }
-
-   if (isModeButtonHeldDownFor3Secs())
-   {
-      displayMode = !displayMode;
-      if (displayMode)
-         decrementButtonValue();
-   }
-   
-   
 }
 
 
@@ -523,41 +768,6 @@ int decrementButtonValue()
       currentButtonValue = 7;
     bModeG = currentButtonValue;
     return bModeG;
-}
-
-int buttonGetValue()
-{
-    bool pressed = buttonWasPressed();
-    if(pressed)
-    {
-        if (firstMode == -1)
-        {  // there was no first mode in eeprom memory.  this might be first time turned on.
-          uint8_t currentButtonValue = bModeG;
-          currentButtonValue += 1;
-          bModeG = currentButtonValue % MAXIMUM_MODES_AVAILABLE;
-        } else
-        {  // after turning on and firstMode read from memory is non-1 means that we have a mode to restore to.
-          bModeG= firstMode;
-          firstMode=-1;
-        }
-    }
-    return bModeG;
-}
-
-bool buttonWasPressed()
-{
-    bool pressedState = false;
-    uint8_t currentState = digitalRead(BUTTON_PIN);
-    if(bPressedG && currentState == 0)
-    {
-        bPressedG = false;
-        pressedState = true;
-    }
-    else if(!bPressedG && currentState == 1)
-    {
-        bPressedG = true;
-    }
-    return pressedState;
 }
 
 bool isButtonPressed()
@@ -958,6 +1168,7 @@ void mode1(float p)
     unsigned long currentMillis = millis();
     if(currentMillis > savedTargetMillisG){
         unsigned long delayMillis = computeNextIteration(p);
+        Serial.print("delayMillis "); Serial.print(delayMillis); Serial.print("   p "); Serial.println(p); 
         savedTargetMillisG = currentMillis + delayMillis;
         uint8_t hue = savedHueG;
         for(uint8_t i = 0; i < lNumG; i++)
@@ -1168,7 +1379,7 @@ void mode7(float p)
     float rawVolts = readPeakToPeak();
     float cookedVolts = rawVolts * p;
 
-    if(cookedVolts <= mVoltFloorG)
+    if(cookedVolts < 0.3)
     {
         // check timing
         unsigned long currentMillis = millis();
@@ -1215,7 +1426,7 @@ Serial.print("Cooked volts: "); Serial.println(cookedVolts);
    {
       for(uint8_t i = 0; i < lNumG; i++)
       {
-         ledsG[i] = CRGB(255, 255, 255);
+         ledsG[i] = CRGB(128, 128, 128);
       }
    }
     FastLED.show();
@@ -1236,4 +1447,3 @@ void writeEEProm(uint8_t location, uint8_t value )
 {
     EEPROM.write(location, value);
 }
-
